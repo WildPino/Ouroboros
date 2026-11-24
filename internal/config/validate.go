@@ -44,6 +44,8 @@ func (c *Config) Validate() error {
 		p.add("repository.path is required")
 	case !IsAbsPath(c.Repository.Path):
 		p.add("repository.path %q must be an absolute path", c.Repository.Path)
+	case IsRoot(c.Repository.Path):
+		p.add("repository.path %q must be a folder, not the root of a drive or share", c.Repository.Path)
 	}
 	if c.Repository.ResticPath != "" && !IsAbsPath(c.Repository.ResticPath) {
 		p.add("repository.restic_path %q must be an absolute path", c.Repository.ResticPath)
@@ -118,6 +120,13 @@ func (c *Config) Validate() error {
 	if c.Logging.KeepDays < 1 {
 		p.add("logging.keep_days must be at least 1")
 	}
+
+	// [timeouts]
+	p.positive("timeouts.backup", c.Timeouts.Backup)
+	p.positive("timeouts.prune", c.Timeouts.Prune)
+	p.positive("timeouts.check", c.Timeouts.Check)
+	p.positive("timeouts.restore", c.Timeouts.Restore)
+	p.positive("timeouts.other", c.Timeouts.Other)
 
 	c.validateJobs(&p)
 
@@ -196,6 +205,19 @@ func IsAbsPath(p string) bool {
 		// \\server\share: both components must be non-empty.
 		rest := strings.FieldsFunc(normalize(p[2:]), func(r rune) bool { return r == '/' })
 		return len(rest) >= 2
+	}
+	return false
+}
+
+// IsRoot reports whether p is the root of a drive (`B:\`) or of a UNC share
+// (`\\server\share`).
+func IsRoot(p string) bool {
+	n := normalize(p)
+	if len(n) == 3 && n[1] == ':' && n[2] == '/' {
+		return true
+	}
+	if strings.HasPrefix(n, "//") {
+		return len(strings.FieldsFunc(n, func(r rune) bool { return r == '/' })) == 2
 	}
 	return false
 }

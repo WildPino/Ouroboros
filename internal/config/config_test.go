@@ -45,6 +45,7 @@ func TestExampleConfigIsValid(t *testing.T) {
 	def := Default()
 	if cfg.Space != def.Space || cfg.Schedule != def.Schedule || cfg.Integrity != def.Integrity ||
 		cfg.Performance != def.Performance || cfg.Logging != def.Logging || cfg.Retention != def.Retention ||
+		cfg.Timeouts != def.Timeouts ||
 		cfg.Repository.Compression != def.Repository.Compression {
 		t.Errorf("example config values differ from Default():\n got %+v\nwant %+v", *cfg, def)
 	}
@@ -211,6 +212,8 @@ func TestValidate(t *testing.T) {
 		{"repo path relative", func(c *Config) { c.Repository.Path = `backup\repo` }, "repository.path"},
 		{"repo path drive relative", func(c *Config) { c.Repository.Path = `B:repo` }, "must be an absolute path"},
 		{"repo path unc", func(c *Config) { c.Repository.Path = `\\nas\backup\repo` }, ""},
+		{"repo path drive root", func(c *Config) { c.Repository.Path = `B:\` }, "not the root"},
+		{"repo path share root", func(c *Config) { c.Repository.Path = `\\nas\backup` }, "not the root"},
 		{"restic path relative", func(c *Config) { c.Repository.ResticPath = `restic.exe` }, "repository.restic_path"},
 		{"restic path absolute", func(c *Config) { c.Repository.ResticPath = `C:\Tools\restic.exe` }, ""},
 		{"compression invalid", func(c *Config) { c.Repository.Compression = "best" }, "repository.compression"},
@@ -257,6 +260,13 @@ func TestValidate(t *testing.T) {
 		// logging
 		{"level invalid", func(c *Config) { c.Logging.Level = "verbose" }, "logging.level"},
 		{"keep_days zero", func(c *Config) { c.Logging.KeepDays = 0 }, "logging.keep_days"},
+
+		// timeouts
+		{"backup timeout zero", func(c *Config) { c.Timeouts.Backup = 0 }, "timeouts.backup"},
+		{"prune timeout zero", func(c *Config) { c.Timeouts.Prune = 0 }, "timeouts.prune"},
+		{"check timeout zero", func(c *Config) { c.Timeouts.Check = 0 }, "timeouts.check"},
+		{"restore timeout zero", func(c *Config) { c.Timeouts.Restore = 0 }, "timeouts.restore"},
+		{"other timeout zero", func(c *Config) { c.Timeouts.Other = 0 }, "timeouts.other"},
 
 		// jobs
 		{"no jobs", func(c *Config) { c.Jobs = nil }, "at least one [[job]]"},
@@ -364,6 +374,25 @@ func TestIsAbsPath(t *testing.T) {
 	for _, tt := range tests {
 		if got := IsAbsPath(tt.in); got != tt.want {
 			t.Errorf("IsAbsPath(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestIsRoot(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{`B:\`, true},
+		{`b:/`, true},
+		{`B:\repo`, false},
+		{`\\nas\share`, true},
+		{`\\nas\share\`, true},
+		{`\\nas\share\repo`, false},
+	}
+	for _, tt := range tests {
+		if got := IsRoot(tt.in); got != tt.want {
+			t.Errorf("IsRoot(%q) = %v, want %v", tt.in, got, tt.want)
 		}
 	}
 }

@@ -44,6 +44,8 @@ func newRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newVersionCmd(opts),
 		newConfigCmd(opts),
 		newDoctorCmd(opts),
+		newInitCmd(opts),
+		newInternalCmd(opts),
 	)
 	return root
 }

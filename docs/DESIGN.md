@@ -88,7 +88,10 @@ i.e. actual growth on disk).
 ### 2.3 Process execution
 
 - Child processes are started with a job object so they die with Ouroboros.
-- Every call has a context with a timeout (configurable per operation).
+- Every call has a context with a timeout, configurable per operation in
+  `[timeouts]` (`backup`, `prune`, `check`, `restore`, and `other` for init,
+  snapshots, forget and tag). The defaults (3d, 1d, 2d, 3d, 15m) only stop a
+  hung process; they do not limit normal work.
 - stdout is streamed and parsed line by line; stderr is captured for logs.
 - Process priority for backups: below normal (configurable), so the PC stays
   responsive.
@@ -185,8 +188,9 @@ capacity checks. Empty by default: capacity alone decides.
 ### 3.8 Ballast file
 
 A file of `reserve_file_size` (default 2 GB, `0` disables) on the repository
-partition, outside the repository directory: `<partition>\ouroboros.ballast`
-or next to the repository. It guarantees that prune can run even if the disk is
+partition, next to the repository directory: `<repository path>.ballast`
+(for `B:\ouroboros`, `B:\ouroboros.ballast`). For this reason the repository
+cannot be the root of a drive or share. It guarantees that prune can run even if the disk is
 completely full. Created by `init`, recreated after each reclaim.
 
 ### 3.9 Out-of-space during backup
@@ -238,6 +242,18 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
 - `restic_path` in config must be an absolute path to a file writable only by
   Administrators; `doctor` warns otherwise.
 
+`init`:
+
+- must run as Administrator, otherwise `secret.bin` could not be protected;
+- requires a password of at least 8 characters that does not start or end
+  with spaces (restic trims the output of the password command, so they would
+  be lost);
+- refuses to run when the repository directory exists and is not empty, or
+  when `secret.bin` already exists; if creating the repository fails, the
+  password it just stored is removed again;
+- skips the ballast with a warning (exit code 3) when creating it would leave
+  less than `min_free`.
+
 ## 7. Performance and memory
 
 `[performance] memory_profile`:
@@ -284,6 +300,8 @@ unknown keys. All problems are reported together.
 
 Further rules:
 
+- `repository.path` must be a folder, not the root of a drive or UNC share
+  (the ballast file lives next to it, see §3.8).
 - At least one `[[job]]` is required. Each job needs an `interval`; there is
   no default. `vss` defaults to `true` when omitted.
 - Job names may contain only letters, digits, `.`, `_` and `-`, and must start

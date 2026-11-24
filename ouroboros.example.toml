@@ -44,6 +44,14 @@ read_concurrency = 0             # 0 = from profile
 pack_size_mb = 0                 # 0 = from profile
 process_priority = "below_normal" # idle | below_normal | normal
 
+[timeouts]
+# Upper bounds that stop a hung restic process; they do not limit normal work.
+backup = "3d"
+prune = "1d"
+check = "2d"
+restore = "3d"
+other = "15m"                    # init, snapshots, forget, tag
+
 [logging]
 level = "info"                   # debug | info | warn | error
 keep_days = 30
