@@ -66,7 +66,7 @@ behaviour changed.
 
 ## M5 — User-facing commands and logging
 
-- [ ] `status` (DESIGN.md §9)
+- [x] `status` (DESIGN.md §9)
 - [x] `snapshots`, `restore`, `pin`, `unpin`, `check`
 - [x] Structured logging with rotation
 - [x] Windows Event Log source registration (in `install`) and error reporting

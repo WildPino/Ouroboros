@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/windows"
 
@@ -458,5 +459,16 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 	if err := runRestore(ctx, opts, deps, latest[0].ID, restoreOptions{target: target}); err == nil {
 		t.Fatal("restore into a non-empty folder accepted")
+	}
+
+	out.Reset()
+	must("status", runStatus(ctx, opts, statusDeps{
+		repo: deps, disk: platformDisk{}, repoSize: space.DirSize, now: time.Now,
+		taskExists: func(context.Context, string) (bool, error) { return false, nil },
+	}))
+	for _, want := range []string{"History:         2 snapshots", "last check ", "docs "} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("status lacks %q:\n%s", want, &out)
+		}
 	}
 }
