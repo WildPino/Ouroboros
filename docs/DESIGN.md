@@ -185,8 +185,9 @@ capacity checks. Empty by default: capacity alone decides.
 ### 3.8 Ballast file
 
 A file of `reserve_file_size` (default 2 GB, `0` disables) on the repository
-partition, outside the repository directory: `<partition>\ouroboros.ballast`
-or next to the repository. It guarantees that prune can run even if the disk is
+partition, next to the repository directory: `<repository path>.ballast`
+(for `B:\ouroboros`, `B:\ouroboros.ballast`). For this reason the repository
+cannot be the root of a drive or share. It guarantees that prune can run even if the disk is
 completely full. Created by `init`, recreated after each reclaim.
 
 ### 3.9 Out-of-space during backup
@@ -284,6 +285,8 @@ unknown keys. All problems are reported together.
 
 Further rules:
 
+- `repository.path` must be a folder, not the root of a drive or UNC share
+  (the ballast file lives next to it, see §3.8).
 - At least one `[[job]]` is required. Each job needs an `interval`; there is
   no default. `vss` defaults to `true` when omitted.
 - Job names may contain only letters, digits, `.`, `_` and `-`, and must start

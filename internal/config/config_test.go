@@ -211,6 +211,8 @@ func TestValidate(t *testing.T) {
 		{"repo path relative", func(c *Config) { c.Repository.Path = `backup\repo` }, "repository.path"},
 		{"repo path drive relative", func(c *Config) { c.Repository.Path = `B:repo` }, "must be an absolute path"},
 		{"repo path unc", func(c *Config) { c.Repository.Path = `\\nas\backup\repo` }, ""},
+		{"repo path drive root", func(c *Config) { c.Repository.Path = `B:\` }, "not the root"},
+		{"repo path share root", func(c *Config) { c.Repository.Path = `\\nas\backup` }, "not the root"},
 		{"restic path relative", func(c *Config) { c.Repository.ResticPath = `restic.exe` }, "repository.restic_path"},
 		{"restic path absolute", func(c *Config) { c.Repository.ResticPath = `C:\Tools\restic.exe` }, ""},
 		{"compression invalid", func(c *Config) { c.Repository.Compression = "best" }, "repository.compression"},
@@ -364,6 +366,25 @@ func TestIsAbsPath(t *testing.T) {
 	for _, tt := range tests {
 		if got := IsAbsPath(tt.in); got != tt.want {
 			t.Errorf("IsAbsPath(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestIsRoot(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{`B:\`, true},
+		{`b:/`, true},
+		{`B:\repo`, false},
+		{`\\nas\share`, true},
+		{`\\nas\share\`, true},
+		{`\\nas\share\repo`, false},
+	}
+	for _, tt := range tests {
+		if got := IsRoot(tt.in); got != tt.want {
+			t.Errorf("IsRoot(%q) = %v, want %v", tt.in, got, tt.want)
 		}
 	}
 }
