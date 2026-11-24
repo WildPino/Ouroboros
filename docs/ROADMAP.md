@@ -28,7 +28,7 @@ behaviour changed.
 ## M2 — Secrets and restic backend
 
 - [x] `internal/secret`: DPAPI machine-scope encrypt/decrypt, ACL on `secret.bin`
-- [ ] Hidden `internal password` subcommand for `--password-command`
+- [x] Hidden `internal password` subcommand for `--password-command`
 - [x] Process runner: job object, timeout, priority, streaming stdout/stderr
 - [x] restic: `Version`, `Init` (format v2), `Snapshots`, `Forget`, `Prune`, `Check`,
       `Restore`, `Tag`
@@ -36,7 +36,7 @@ behaviour changed.
 - [x] Exit code → typed error mapping (exit 3 = warning)
 - [x] Recorded JSON fixtures + parser tests
 - [x] Integration tests with real restic in temp dirs (skipped when unavailable)
-- [ ] `init` command (password prompt twice, store secret, create repo, create ballast,
+- [x] `init` command (password prompt twice, store secret, create repo, create ballast,
       print "record your password" warning)
 
 ## M3 — Space manager
