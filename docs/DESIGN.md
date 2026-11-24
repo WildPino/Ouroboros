@@ -52,6 +52,7 @@ type Backend interface {
     Version(ctx context.Context) (string, error)
     Init(ctx context.Context) error
     Backup(ctx context.Context, job Job) (BackupResult, error)
+    EstimateBackup(ctx context.Context, job Job) (uint64, error) // dry run
     Snapshots(ctx context.Context, filter SnapshotFilter) ([]Snapshot, error)
     Forget(ctx context.Context, ids []string) error
     Prune(ctx context.Context, opts PruneOptions) (PruneResult, error)
@@ -194,6 +195,10 @@ cannot be the root of a drive or share. It guarantees that prune can run even if
 completely full. Created by `init`, recreated after each reclaim.
 
 ### 3.9 Out-of-space during backup
+
+A failed backup is treated as out of space when the free space measured right
+after the failure is below `prune_headroom`. Measuring works in every Windows
+language and does not depend on restic's error text.
 
 If a backup fails because the disk is full:
 

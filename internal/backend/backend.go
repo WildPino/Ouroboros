@@ -23,6 +23,10 @@ type Backend interface {
 	Version(ctx context.Context) (string, error)
 	Init(ctx context.Context) error
 	Backup(ctx context.Context, job Job) (BackupResult, error)
+	// EstimateBackup simulates a backup of job without writing anything and
+	// returns the uncompressed size of the data it would add: an upper
+	// bound for the growth of the repository.
+	EstimateBackup(ctx context.Context, job Job) (uint64, error)
 	Snapshots(ctx context.Context, filter SnapshotFilter) ([]Snapshot, error)
 	Forget(ctx context.Context, ids []string) error
 	Prune(ctx context.Context, opts PruneOptions) (PruneResult, error)

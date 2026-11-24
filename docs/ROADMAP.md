@@ -41,17 +41,17 @@ behaviour changed.
 
 ## M3 — Space manager
 
-- [ ] `FreeSpaceProvider` (Windows: `GetDiskFreeSpaceExW`) + fake
-- [ ] Repository size walker
-- [ ] Ballast create/delete/recreate
-- [ ] Target computation (`min_free` absolute/percent, `prune_headroom`, `max_repo_size`)
-- [ ] Growth predictor (history-based and first-run dry-run)
-- [ ] Candidate selection (min per job, protection window, pinned)
-- [ ] Reclaim loop with exponential batching (DESIGN.md §3.5)
-- [ ] `reclaim --dry-run`
-- [ ] Simulation test harness (fake repo with shared chunks + fixed disk) and
+- [x] `FreeSpaceProvider` (Windows: `GetDiskFreeSpaceExW`) + fake
+- [x] Repository size walker
+- [x] Ballast create/delete/recreate
+- [x] Target computation (`min_free` absolute/percent, `prune_headroom`, `max_repo_size`)
+- [x] Growth predictor (history-based and first-run dry-run)
+- [x] Candidate selection (min per job, protection window, pinned)
+- [x] Reclaim loop with exponential batching (DESIGN.md §3.5)
+- [x] `reclaim --dry-run`
+- [x] Simulation test harness (fake repo with shared chunks + fixed disk) and
       invariant checks over long random runs
-- [ ] Out-of-space recovery path (DESIGN.md §3.9)
+- [x] Out-of-space recovery path (DESIGN.md §3.9)
 
 ## M4 — Scheduler, state, locking
 
