@@ -19,7 +19,7 @@ behaviour changed.
 
 - [ ] CLI framework (standard `flag` with subcommands, or `spf13/cobra`)
 - [ ] `version`, `config init`, `config validate`
-- [ ] Config types with `Size` (bytes or percent) and `Duration` (with `d`) parsing
+- [x] Config types with `Size` (bytes or percent) and `Duration` (with `d`) parsing
 - [ ] Defaults and validation rules (DESIGN.md §10), unknown keys rejected
 - [ ] Unit tests for every validation rule
 - [ ] `doctor`: config, admin rights, restic present and ≥ 0.17, repo path writable,
