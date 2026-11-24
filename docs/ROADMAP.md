@@ -6,7 +6,7 @@ behaviour changed.
 
 ## M0 — Project setup
 
-- [ ] Choose the license (default: MIT) and add `LICENSE`
+- [x] Choose the license (default: MIT) and add `LICENSE`
 - [ ] `go mod init github.com/<owner>/ouroboros`, Go version pinned in `go.mod`
 - [ ] Directory layout as in DESIGN.md §2
 - [ ] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
