@@ -12,6 +12,7 @@ import (
 
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/logging"
 	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/secret"
 )
@@ -45,6 +46,8 @@ type installDeps struct {
 	tasks            taskScheduler
 	now              func() time.Time
 	tempDir          func() string
+	registerSource   func() error
+	unregisterSource func() error
 }
 
 func defaultInstallDeps() installDeps {
@@ -56,6 +59,8 @@ func defaultInstallDeps() installDeps {
 		tasks:            systemTasks{},
 		now:              time.Now,
 		tempDir:          os.TempDir,
+		registerSource:   logging.RegisterSource,
+		unregisterSource: logging.UnregisterSource,
 	}
 }
 
@@ -64,7 +69,8 @@ func newInstallCmd(opts *options) *cobra.Command {
 		Use:   "install",
 		Short: "Install the scheduled task that runs the backups",
 		Long: "Register the scheduled task " + windows.TaskName + ", which runs \"ouroboros run\" as\n" +
-			"SYSTEM every schedule.tick, catching up on runs missed while the computer was off.\n" +
+			"SYSTEM every schedule.tick, catching up on runs missed while the computer was off,\n" +
+			"and registers the Event Log source " + logging.Source + " when logging.event_log is on.\n" +
 			"Running install again updates the task. Must be run as Administrator.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -132,6 +138,11 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 	}
 
 	warnings := installWarnings(d, exe, resticExe, cfgPath)
+	if cfg.Logging.EventLog {
+		if err := d.registerSource(); err != nil {
+			warnings = append(warnings, fmt.Sprintf("cannot register the Event Log source %s: %v", logging.Source, err))
+		}
+	}
 
 	def, err := windows.TaskXML(windows.TaskSpec{
 		Command:      exe,
@@ -199,5 +210,9 @@ func runUninstall(ctx context.Context, opts *options, d installDeps) error {
 		return err
 	}
 	fmt.Fprintf(opts.stdout, "Removed scheduled task %s.\n", windows.TaskName)
+	if err := d.unregisterSource(); err != nil {
+		fmt.Fprintf(opts.stderr, "warning: cannot remove the Event Log source %s: %v\n", logging.Source, err)
+		return &codedError{code: exitWarnings}
+	}
 	return nil
 }
