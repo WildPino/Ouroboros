@@ -1,6 +1,9 @@
 package lock
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 // Name is the machine-wide mutex that serializes Ouroboros runs
 // (DESIGN.md §4). The Global namespace makes it shared across sessions, so
@@ -14,14 +17,18 @@ var ErrLocked = errors.New("another ouroboros process is running")
 type Lock struct {
 	release chan struct{}
 	done    chan error
+	once    sync.Once
+	err     error
 }
 
 // Release frees the lock. It is safe to call more than once.
 func (l *Lock) Release() error {
-	if l == nil || l.release == nil {
+	if l == nil {
 		return nil
 	}
-	close(l.release)
-	l.release = nil
-	return <-l.done
+	l.once.Do(func() {
+		close(l.release)
+		l.err = <-l.done
+	})
+	return l.err
 }

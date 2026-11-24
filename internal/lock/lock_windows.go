@@ -20,7 +20,7 @@ func Acquire(name string) (*Lock, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &Lock{release: make(chan struct{}), done: make(chan error, 1)}
+	release, done := make(chan struct{}), make(chan error, 1)
 	acquired := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
@@ -45,11 +45,11 @@ func Acquire(name string) (*Lock, error) {
 			return
 		}
 		acquired <- nil
-		<-l.release
-		l.done <- windows.ReleaseMutex(h)
+		<-release
+		done <- windows.ReleaseMutex(h)
 	}()
 	if err := <-acquired; err != nil {
 		return nil, err
 	}
-	return l, nil
+	return &Lock{release: release, done: done}, nil
 }
