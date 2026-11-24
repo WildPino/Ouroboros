@@ -12,7 +12,7 @@ behaviour changed.
 - [x] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
 - [x] `.editorconfig`, `gofmt` enforced
 - [x] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
-- [ ] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
+- [x] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
 - [x] Version injection at build time (`-ldflags -X main.version=...`)
 
 ## M1 — Config and CLI skeleton
