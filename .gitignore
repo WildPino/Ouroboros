@@ -10,3 +10,6 @@ coverage.*
 
 # Emergency ballast files created during manual testing
 *.ballast
+
+# Output of the scripts in scripts/
+/test-results/
