@@ -27,7 +27,7 @@ behaviour changed.
 
 ## M2 — Secrets and restic backend
 
-- [ ] `internal/secret`: DPAPI machine-scope encrypt/decrypt, ACL on `secret.bin`
+- [x] `internal/secret`: DPAPI machine-scope encrypt/decrypt, ACL on `secret.bin`
 - [ ] Hidden `internal password` subcommand for `--password-command`
 - [ ] Process runner: job object, timeout, priority, streaming stdout/stderr
 - [ ] restic: `Version`, `Init` (format v2), `Snapshots`, `Forget`, `Prune`, `Check`,
