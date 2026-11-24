@@ -258,3 +258,24 @@ func TestFormatBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestConfigErrorExitCode checks that every command that reads the
+// configuration exits with 2 when it is missing or invalid, before doing
+// anything else.
+func TestConfigErrorExitCode(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "none.toml")
+	invalid := writeConfig(t, testConfig+"bogus = 1\n")
+	commands := [][]string{
+		{"run"}, {"run", "--job", "docs", "--force"}, {"status"}, {"snapshots"}, {"check"},
+		{"pin", "abcd1234"}, {"unpin", "abcd1234"}, {"restore", "abcd1234", "--target", t.TempDir()},
+		{"reclaim", "--dry-run"}, {"install"}, {"init"}, {"config", "validate"},
+	}
+	for _, cfg := range []string{missing, invalid} {
+		for _, args := range commands {
+			code, _, errOut := runCLI(append(args, "--config", cfg)...)
+			if code != exitConfig {
+				t.Errorf("%v with %s: code %d, want %d (stderr %q)", args, filepath.Base(cfg), code, exitConfig, errOut)
+			}
+		}
+	}
+}

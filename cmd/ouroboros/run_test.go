@@ -15,9 +15,9 @@ import (
 	"github.com/WildPino/ouroboros/internal/space"
 )
 
-func failingRunDeps(t *testing.T) runDeps {
+func failingRepoDeps(t *testing.T) repoDeps {
 	fail := func() { t.Helper(); t.Fatal("must not be reached") }
-	return runDeps{
+	return repoDeps{
 		isElevated:  func() (bool, error) { return true, nil },
 		acquire:     func() (*lock.Lock, error) { fail(); return nil, nil },
 		checkRestic: func(context.Context, *config.Config) error { fail(); return nil },
@@ -26,7 +26,7 @@ func failingRunDeps(t *testing.T) runDeps {
 
 func TestRunRefusesWithoutElevation(t *testing.T) {
 	var out bytes.Buffer
-	d := failingRunDeps(t)
+	d := failingRepoDeps(t)
 	d.isElevated = func() (bool, error) { return false, nil }
 	opts := &options{configPath: writeConfig(t, testConfig), stdout: &out, stderr: &out}
 	err := runRun(context.Background(), opts, scheduler.Options{}, d)
@@ -37,7 +37,7 @@ func TestRunRefusesWithoutElevation(t *testing.T) {
 
 func TestRunExitsQuietlyWhenLocked(t *testing.T) {
 	var out bytes.Buffer
-	d := failingRunDeps(t)
+	d := failingRepoDeps(t)
 	d.acquire = func() (*lock.Lock, error) { return nil, lock.ErrLocked }
 	opts := &options{configPath: writeConfig(t, testConfig), stdout: &out, stderr: &out}
 	if err := runRun(context.Background(), opts, scheduler.Options{}, d); err != nil {

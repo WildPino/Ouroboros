@@ -5,39 +5,48 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/WildPino/ouroboros/internal/backend"
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
 	"github.com/WildPino/ouroboros/internal/lock"
+	"github.com/WildPino/ouroboros/internal/logging"
 	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/scheduler"
 	"github.com/WildPino/ouroboros/internal/space"
 	"github.com/WildPino/ouroboros/internal/state"
 )
 
-// runDeps holds what run needs from the system, replaceable in tests.
-type runDeps struct {
+// repoDeps holds what the repository commands need from the system,
+// replaceable in tests.
+type repoDeps struct {
 	isElevated  func() (bool, error)
 	acquire     func() (*lock.Lock, error)
 	checkRestic func(ctx context.Context, cfg *config.Config) error
-	newBackend  func(cfg *config.Config, configPath string) (*restic.Restic, error)
+	newBackend  func(cfg *config.Config, configPath string) (backend.Backend, error)
 	hostname    func() (string, error)
+	openEvents  eventOpener
 }
 
-func defaultRunDeps() runDeps {
-	return runDeps{
+func defaultRepoDeps() repoDeps {
+	return repoDeps{
 		isElevated:  windows.IsElevated,
 		acquire:     func() (*lock.Lock, error) { return lock.Acquire(lock.Name) },
 		checkRestic: checkResticVersion,
-		newBackend:  newResticBackend,
-		hostname:    os.Hostname,
+		newBackend: func(cfg *config.Config, p string) (backend.Backend, error) {
+			b, err := newResticBackend(cfg, p)
+			if err != nil {
+				return nil, err
+			}
+			return b, nil
+		},
+		hostname:   os.Hostname,
+		openEvents: logging.OpenEventLog,
 	}
 }
 
@@ -52,7 +61,7 @@ func newRunCmd(opts *options) *cobra.Command {
 			"is skipped; --force runs the selected jobs even if they are not due.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runRun(cmd.Context(), opts, ropts, defaultRunDeps())
+			return runRun(cmd.Context(), opts, ropts, defaultRepoDeps())
 		},
 	}
 	cmd.Flags().StringVar(&ropts.Job, "job", "", "run only the job with this name")
@@ -60,19 +69,8 @@ func newRunCmd(opts *options) *cobra.Command {
 	return cmd
 }
 
-func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d runDeps) error {
-	cfg, err := config.Load(opts.configPath)
-	if err != nil {
-		return err
-	}
-	elevated, err := d.isElevated()
-	if err != nil {
-		return fmt.Errorf("check privileges: %w", err)
-	}
-	if !elevated {
-		return errors.New("run must be run as Administrator: shadow copies and the password file require it")
-	}
-	l, err := d.acquire()
+func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d repoDeps) error {
+	sess, err := openRepo(ctx, opts, d, "run", true)
 	if errors.Is(err, lock.ErrLocked) {
 		fmt.Fprintln(opts.stdout, "Another ouroboros process is running; nothing to do.")
 		return nil
@@ -80,24 +78,14 @@ func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d runDe
 	if err != nil {
 		return err
 	}
-	defer l.Release()
-
-	if err := d.checkRestic(ctx, cfg); err != nil {
-		return err
-	}
-	b, err := d.newBackend(cfg, opts.configPath)
+	defer sess.release()
+	cfg, b := sess.cfg, sess.backend
+	r, err := newReclaimer(cfg, b, sess.host)
 	if err != nil {
 		return err
 	}
-	host, err := d.hostname()
-	if err != nil {
-		return err
-	}
-	r, err := newReclaimer(cfg, b, host)
-	if err != nil {
-		return err
-	}
-	log := newLogger(opts.stderr, cfg.Logging.Level)
+	log, closeLog := openLog(cfg, opts.configPath, opts.stderr, d.openEvents)
+	defer closeLog()
 	r.Log = log
 	dir := filepath.Dir(opts.configPath)
 	runner := &scheduler.Runner{
@@ -183,14 +171,4 @@ func checkResticVersion(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("restic %s is too old: %s or later is required", v, restic.MinVersion)
 	}
 	return nil
-}
-
-// newLogger writes text logs to w. File logs and the Event Log are added
-// by the logging package.
-func newLogger(w io.Writer, level string) *slog.Logger {
-	var l slog.Level
-	if err := l.UnmarshalText([]byte(strings.ToUpper(level))); err != nil {
-		l = slog.LevelInfo
-	}
-	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: l}))
 }

@@ -63,6 +63,8 @@ type installCase struct {
 	exe     string
 	tasks   *fakeTasks
 	deps    installDeps
+
+	registered, unregistered int
 }
 
 func newInstallCase(t *testing.T) *installCase {
@@ -92,6 +94,8 @@ func newInstallCase(t *testing.T) *installCase {
 		tasks:            c.tasks,
 		now:              func() time.Time { return time.Date(2026, 5, 1, 10, 7, 33, 0, time.Local) },
 		tempDir:          func() string { return filepath.Join(root, "tmp") },
+		registerSource:   func() error { c.registered++; return nil },
+		unregisterSource: func() error { c.unregistered++; return nil },
 	}
 	return c
 }
@@ -131,6 +135,9 @@ func TestInstall(t *testing.T) {
 	}
 	if len(c.tasks.deleted) != 1 || !strings.Contains(c.out.String(), "Removed") {
 		t.Fatalf("deleted %v, stdout %q", c.tasks.deleted, c.out)
+	}
+	if c.registered != 2 || c.unregistered != 1 {
+		t.Fatalf("event source registered %d, unregistered %d", c.registered, c.unregistered)
 	}
 	c.out.Reset()
 	if err := runUninstall(context.Background(), c.opts, c.deps); err != nil {
@@ -205,5 +212,17 @@ func TestUninstallRequiresElevation(t *testing.T) {
 	c.deps.isElevated = func() (bool, error) { return false, nil }
 	if err := runUninstall(context.Background(), c.opts, c.deps); err == nil {
 		t.Fatal("want error")
+	}
+}
+
+func TestInstallEventSourceFailureIsWarning(t *testing.T) {
+	c := newInstallCase(t)
+	c.deps.registerSource = func() error { return errors.New("access denied") }
+	err := runInstall(context.Background(), c.opts, c.deps)
+	if exitCode(err) != exitWarnings || !strings.Contains(c.errOut.String(), "Event Log source") {
+		t.Fatalf("err %v stderr %q", err, c.errOut)
+	}
+	if _, ok := c.tasks.created[windows.TaskName]; !ok {
+		t.Fatal("task not installed")
 	}
 }

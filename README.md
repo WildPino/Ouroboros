@@ -137,13 +137,23 @@ vss = true
 | `ouroboros run [--job NAME] [--force]` | Run due jobs (or the named job immediately) |
 | `ouroboros status` | Jobs, last results, space usage, history depth |
 | `ouroboros snapshots [--job NAME]` | List snapshots |
-| `ouroboros restore SNAPSHOT --target DIR [--include PATTERN]` | Restore files |
+| `ouroboros restore SNAPSHOT --target DIR [--include PATTERN] [--overwrite]` | Restore files (into an empty folder unless `--overwrite`) |
 | `ouroboros reclaim --dry-run` | Show what would be deleted to reach the target free space |
 | `ouroboros pin SNAPSHOT` / `unpin` | Protect a snapshot from automatic deletion |
 | `ouroboros check [--read-data PERCENT]` | Verify repository integrity |
 | `ouroboros install` / `uninstall` | Register or remove the scheduled task |
 | `ouroboros doctor` | Check restic version, permissions, VSS, config, free space |
 | `ouroboros config init` / `validate` | Print an example config / validate the current one |
+
+`snapshots`, `restore`, `pin`, `unpin`, `check`, `run` and `init` need an
+Administrator console, because only administrators can read the stored password.
+`pin`, `unpin` and `check` refuse to run while a backup is in progress.
+
+Logs are written to `%ProgramData%\Ouroboros\logs\`; warnings and errors also
+go to the Windows Event Log (Application, source `Ouroboros`).
+
+Exit codes: `0` success, `1` error, `2` configuration error, `3` completed with
+warnings, `4` a backup was skipped because not enough space could be freed.
 
 ## FAQ
 

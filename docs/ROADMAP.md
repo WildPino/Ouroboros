@@ -66,11 +66,11 @@ behaviour changed.
 
 ## M5 — User-facing commands and logging
 
-- [ ] `status` (DESIGN.md §9)
-- [ ] `snapshots`, `restore`, `pin`, `unpin`, `check`
-- [ ] Structured logging with rotation
-- [ ] Windows Event Log source registration (in `install`) and error reporting
-- [ ] Exit codes as specified
+- [x] `status` (DESIGN.md §9)
+- [x] `snapshots`, `restore`, `pin`, `unpin`, `check`
+- [x] Structured logging with rotation
+- [x] Windows Event Log source registration (in `install`) and error reporting
+- [x] Exit codes as specified
 
 ## M6 — Hardening
 

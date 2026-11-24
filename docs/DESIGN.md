@@ -219,8 +219,10 @@ If a backup fails because the disk is full:
 
 - One Windows scheduled task, `\Ouroboros\Tick`, runs `ouroboros run` every
   15 minutes (configurable), as `SYSTEM`, with highest privileges, "run as soon
-  as possible after a scheduled start is missed", no stop on battery
-  (configurable).
+  as possible after a scheduled start is missed". With `run_on_battery = false`
+  (default) the task does not start on battery power; a run already in
+  progress is never stopped by unplugging, since restic would be killed and
+  the work lost.
 - `ouroboros run` acquires a global named mutex `Global\Ouroboros`; if already
   held, it exits immediately with code 0 (another run in progress).
 - A job is due when `now ≥ last_success + interval`, or, if the last attempt
@@ -233,7 +235,11 @@ If a backup fails because the disk is full:
   was set back), the task is due: waiting for the clock to catch up could stop
   backups for an arbitrary time.
 - Jobs run sequentially, in config order.
-- Maintenance tasks (normal prune, `check`) run after jobs, when due.
+- Maintenance tasks (normal prune, `check`) run after jobs, when due. Their
+  timestamps record the attempt, not the success: a failing check is reported
+  once per interval, not on every tick. Right after `init` both are due.
+- `run --job NAME` runs only that job (when due, or always with `--force`)
+  and skips maintenance.
 
 ## 5. State
 
