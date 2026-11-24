@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -350,14 +351,20 @@ func TestRunEndToEnd(t *testing.T) {
 		t.Fatalf("init: %v\n%s%s", err, c.out, c.errOut)
 	}
 
-	deps := runDeps{
+	deps := repoDeps{
 		isElevated: func() (bool, error) { return true, nil },
 		acquire: func() (*lock.Lock, error) {
 			return lock.Acquire(`Local\OuroborosRunTest-` + strconv.Itoa(os.Getpid()))
 		},
 		checkRestic: checkResticVersion,
-		newBackend:  newBackend,
-		hostname:    func() (string, error) { return "testhost", nil },
+		newBackend: func(cfg *config.Config, p string) (backend.Backend, error) {
+			b, err := newBackend(cfg, p)
+			if err != nil {
+				return nil, err
+			}
+			return b, nil
+		},
+		hostname: func() (string, error) { return "testhost", nil },
 	}
 	run := func(ropts scheduler.Options) string {
 		t.Helper()
@@ -405,5 +412,51 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 	if kinds[state.KindBackup] != 2 || kinds[state.KindPrune] != 1 || kinds[state.KindCheck] != 1 {
 		t.Fatalf("history kinds %v", kinds)
+	}
+
+	// The user-facing commands against the same repository.
+	ctx := context.Background()
+	var out, errOut bytes.Buffer
+	opts := &options{configPath: c.cfgPath, stdout: &out, stderr: &errOut}
+	must := func(name string, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v\nstdout:\n%s\nstderr:\n%s", name, err, &out, &errOut)
+		}
+	}
+	must("snapshots", runSnapshots(ctx, opts, deps, "docs"))
+	if !strings.Contains(out.String(), "2 snapshots") {
+		t.Fatalf("snapshots:\n%s", &out)
+	}
+	oldest := snaps[0]
+	must("pin", runPin(ctx, opts, deps, oldest.ID[:8], true))
+	pinned, err := b.Snapshots(ctx, backend.SnapshotFilter{Tags: []string{backend.TagPinned}})
+	if err != nil || len(pinned) != 1 || !pinned[0].Time.Equal(oldest.Time) {
+		t.Fatalf("pinned: %v, %v", pinned, err)
+	}
+	must("unpin", runPin(ctx, opts, deps, pinned[0].ID, false))
+	if pinned, _ := b.Snapshots(ctx, backend.SnapshotFilter{Tags: []string{backend.TagPinned}}); len(pinned) != 0 {
+		t.Fatalf("still pinned: %v", pinned)
+	}
+	must("check", runCheck(ctx, opts, deps, 100))
+
+	latest, err := b.Snapshots(ctx, backend.SnapshotFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(c.dir, "restored")
+	must("restore", runRestore(ctx, opts, deps, latest[len(latest)-1].ID, restoreOptions{target: target}))
+	var restored []byte
+	filepath.WalkDir(target, func(p string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() && e.Name() == "a.txt" {
+			restored, _ = os.ReadFile(p)
+		}
+		return nil
+	})
+	if !bytes.Equal(restored, bytes.Repeat([]byte("ouroboros "), 10000)) {
+		t.Fatalf("restored file has %d bytes", len(restored))
+	}
+	if err := runRestore(ctx, opts, deps, latest[0].ID, restoreOptions{target: target}); err == nil {
+		t.Fatal("restore into a non-empty folder accepted")
 	}
 }
