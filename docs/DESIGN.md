@@ -196,6 +196,10 @@ completely full. Created by `init`, recreated after each reclaim.
 
 ### 3.9 Out-of-space during backup
 
+A failed backup is treated as out of space when the free space measured right
+after the failure is below `prune_headroom`. Measuring works in every Windows
+language and does not depend on restic's error text.
+
 If a backup fails because the disk is full:
 
 1. Delete the ballast.
