@@ -9,7 +9,7 @@ behaviour changed.
 - [x] Choose the license (default: MIT) and add `LICENSE`
 - [x] `go mod init github.com/<owner>/ouroboros`, Go version pinned in `go.mod`
 - [x] Directory layout as in DESIGN.md §2
-- [ ] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
+- [x] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
 - [ ] `.editorconfig`, `gofmt` enforced
 - [ ] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
 - [ ] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
