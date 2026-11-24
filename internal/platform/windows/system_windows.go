@@ -111,3 +111,28 @@ func CheckService(name string) error {
 	}
 	return nil
 }
+
+var procGlobalMemoryStatusEx = windows.NewLazySystemDLL("kernel32.dll").NewProc("GlobalMemoryStatusEx")
+
+// memoryStatusEx is MEMORYSTATUSEX.
+type memoryStatusEx struct {
+	length               uint32
+	memoryLoad           uint32
+	totalPhys            uint64
+	availPhys            uint64
+	totalPageFile        uint64
+	availPageFile        uint64
+	totalVirtual         uint64
+	availVirtual         uint64
+	availExtendedVirtual uint64
+}
+
+// FreeMemory returns the physical memory available to processes.
+func FreeMemory() (uint64, error) {
+	m := memoryStatusEx{}
+	m.length = uint32(unsafe.Sizeof(m))
+	if r, _, err := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&m))); r == 0 {
+		return 0, fmt.Errorf("GlobalMemoryStatusEx: %w", err)
+	}
+	return m.availPhys, nil
+}

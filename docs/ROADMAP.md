@@ -80,7 +80,7 @@ behaviour changed.
 - [ ] Locked-file test with VSS on and off
 - [x] Long paths (> 260 chars) and Unicode file names
 - [x] Clock changes / DST: due-time logic uses monotonic + wall time safely
-- [ ] Memory profile `auto` detection and overrides
+- [x] Memory profile `auto` detection and overrides
 
 ## M7 — Release v0.1.0
 

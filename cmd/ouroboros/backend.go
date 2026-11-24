@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/secret"
 )
 
@@ -35,13 +37,16 @@ func newResticBackend(cfg *config.Config, configPath string) (*restic.Restic, er
 	if err != nil {
 		return nil, err
 	}
+	// Unknown free memory (0) leaves the profile unconstrained.
+	freeRAM, _ := windows.FreeMemory()
+	readConcurrency, packSizeMB := cfg.Performance.Resolve(runtime.NumCPU(), freeRAM)
 	return restic.New(restic.Options{
 		Executable:      exe,
 		Repository:      cfg.Repository.Path,
 		PasswordCommand: restic.PasswordCommand(self, "--config", absConfig),
 		Compression:     cfg.Repository.Compression,
-		PackSizeMB:      cfg.Performance.PackSizeMB,
-		ReadConcurrency: cfg.Performance.ReadConcurrency,
+		PackSizeMB:      packSizeMB,
+		ReadConcurrency: readConcurrency,
 		Priority:        cfg.Performance.ProcessPriority,
 		Timeouts: restic.Timeouts{
 			Short:   cfg.Timeouts.Other.Std(),

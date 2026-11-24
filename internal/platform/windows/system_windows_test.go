@@ -56,3 +56,10 @@ func TestCheckDirWritable(t *testing.T) {
 		t.Fatalf("check created files: %v", entries)
 	}
 }
+
+func TestFreeMemory(t *testing.T) {
+	free, err := FreeMemory()
+	if err != nil || free < 16<<20 {
+		t.Fatalf("FreeMemory = %d, %v", free, err)
+	}
+}
