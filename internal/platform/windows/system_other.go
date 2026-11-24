@@ -20,3 +20,6 @@ func CheckService(name string) error { return errors.ErrUnsupported }
 
 // CheckDirWritable is only implemented on Windows.
 func CheckDirWritable(dir string) error { return errors.ErrUnsupported }
+
+// AssignToKillOnExitJob is only implemented on Windows.
+func AssignToKillOnExitJob(pid int) error { return errors.ErrUnsupported }
