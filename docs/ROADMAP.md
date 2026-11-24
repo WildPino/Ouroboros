@@ -49,7 +49,7 @@ behaviour changed.
 - [x] Candidate selection (min per job, protection window, pinned)
 - [x] Reclaim loop with exponential batching (DESIGN.md §3.5)
 - [ ] `reclaim --dry-run`
-- [ ] Simulation test harness (fake repo with shared chunks + fixed disk) and
+- [x] Simulation test harness (fake repo with shared chunks + fixed disk) and
       invariant checks over long random runs
 - [x] Out-of-space recovery path (DESIGN.md §3.9)
 
