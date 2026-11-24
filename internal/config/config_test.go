@@ -413,10 +413,40 @@ func TestIsWithin(t *testing.T) {
 		{`E:\a\..\repo`, `E:\repo`, true},
 		{`\\nas\share\repo`, `\\nas\share`, true},
 		{`\\nas\share2\repo`, `\\nas\share`, false},
+		// NTFS names are case-insensitive beyond ASCII too.
+		{`E:\Città\repo`, `e:\CITTÀ`, true},
+		{`E:\Привет\repo`, `E:\привет`, true},
+		{`E:\日本語\𝔸𝔹ℂ\repo`, `E:\日本語\𝔸𝔹ℂ`, true},
+		{`E:\日本語\repo`, `E:\日本`, false},
 	}
 	for _, tt := range tests {
 		if got := IsWithin(tt.inner, tt.outer); got != tt.want {
 			t.Errorf("IsWithin(%q, %q) = %v, want %v", tt.inner, tt.outer, got, tt.want)
 		}
+	}
+}
+
+func TestParseUnicodePaths(t *testing.T) {
+	doc := `
+[repository]
+path = 'B:\Copie di sicurezza\Città'
+
+[[job]]
+name = "documenti"
+paths = ['C:\Users\Zoë\Документы', 'C:\Users\Zoë\日本語']
+exclude = ['*.tmp', 'Ελληνικά']
+interval = "6h"
+`
+	cfg, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Repository.Path != `B:\Copie di sicurezza\Città` || cfg.Jobs[0].Paths[1] != `C:\Users\Zoë\日本語` || cfg.Jobs[0].Exclude[1] != "Ελληνικά" {
+		t.Fatalf("parsed %+v", cfg)
+	}
+	// The repository inside a source, spelled with different case.
+	cfg.Jobs[0].Paths = []string{`b:\COPIE DI SICUREZZA`}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "is inside backed-up path") {
+		t.Fatalf("got %v", err)
 	}
 }

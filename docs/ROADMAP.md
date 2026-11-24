@@ -78,7 +78,7 @@ behaviour changed.
 - [ ] Disk-full end-to-end test on a small VHDX (documented manual procedure in
       `docs/TESTING.md`)
 - [ ] Locked-file test with VSS on and off
-- [ ] Long paths (> 260 chars) and Unicode file names
+- [x] Long paths (> 260 chars) and Unicode file names
 - [ ] Clock changes / DST: due-time logic uses monotonic + wall time safely
 - [ ] Memory profile `auto` detection and overrides
 
