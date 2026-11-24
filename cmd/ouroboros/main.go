@@ -21,6 +21,9 @@ const (
 	exitError    = 1
 	exitConfig   = 2
 	exitWarnings = 3
+	// exitCannotReclaim: a backup was skipped because not enough space
+	// could be freed without touching protected snapshots.
+	exitCannotReclaim = 4
 )
 
 // codedError carries a specific exit code. A nil err with a code means the

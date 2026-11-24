@@ -45,6 +45,7 @@ func newRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newConfigCmd(opts),
 		newDoctorCmd(opts),
 		newInitCmd(opts),
+		newRunCmd(opts),
 		newReclaimCmd(opts),
 		newInternalCmd(opts),
 	)

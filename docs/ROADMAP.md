@@ -60,7 +60,7 @@ behaviour changed.
 - [x] Due-job computation (interval, retry_after) with tests using a fake clock
 - [x] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
-- [ ] `run --job NAME --force`
+- [x] `run --job NAME --force`
 - [ ] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
       (missed-run catch-up, battery setting)
 

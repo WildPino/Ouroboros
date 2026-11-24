@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,8 +18,11 @@ import (
 	"github.com/WildPino/ouroboros/internal/backend"
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/lock"
+	"github.com/WildPino/ouroboros/internal/scheduler"
 	"github.com/WildPino/ouroboros/internal/secret"
 	"github.com/WildPino/ouroboros/internal/space"
+	"github.com/WildPino/ouroboros/internal/state"
 )
 
 // testStore returns a Store whose ACL also admits the current user, because
@@ -294,4 +298,112 @@ func mustRead(t *testing.T, p string) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// TestRunEndToEnd creates a repository in a temporary directory and runs
+// real backups into it, without shadow copies and without a ballast.
+func TestRunEndToEnd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test")
+	}
+	resticExe, err := exec.LookPath("restic")
+	if err != nil {
+		t.Skip("restic not installed")
+	}
+	t.Setenv(mainHelperEnv, "1")
+	c := newInitCase(t, "")
+	// The job table is the last one in the file.
+	cfgText, err := os.ReadFile(c.cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfgText = bytes.Replace(cfgText, []byte(`reserve_file_size = "1MB"`), []byte(`reserve_file_size = "0"`), 1)
+	cfgText = append(cfgText, "vss = false\n"...)
+	if err := os.WriteFile(c.cfgPath, cfgText, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(c.dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "a.txt"), bytes.Repeat([]byte("ouroboros "), 10000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := filepath.Join(c.dir, "cache")
+	newBackend := func(cfg *config.Config, cfgPath string) (*restic.Restic, error) {
+		self, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		return restic.New(restic.Options{
+			Executable:      resticExe,
+			Repository:      cfg.Repository.Path,
+			PasswordCommand: restic.PasswordCommand(self, "--config", cfgPath),
+			Hostname:        "testhost",
+			CacheDir:        cache,
+		})
+	}
+	c.deps.newBackend = func(cfg *config.Config, p string) (repoIniter, error) { return newBackend(cfg, p) }
+	c.deps.disk = platformDisk{}
+	if err := runInit(context.Background(), c.opts, c.deps); err != nil {
+		t.Fatalf("init: %v\n%s%s", err, c.out, c.errOut)
+	}
+
+	deps := runDeps{
+		isElevated: func() (bool, error) { return true, nil },
+		acquire: func() (*lock.Lock, error) {
+			return lock.Acquire(`Local\OuroborosRunTest-` + strconv.Itoa(os.Getpid()))
+		},
+		checkRestic: checkResticVersion,
+		newBackend:  newBackend,
+		hostname:    func() (string, error) { return "testhost", nil },
+	}
+	run := func(ropts scheduler.Options) string {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		opts := &options{configPath: c.cfgPath, stdout: &out, stderr: &errOut}
+		if err := runRun(context.Background(), opts, ropts, deps); err != nil {
+			t.Fatalf("run %+v: %v\nstdout:\n%s\nstderr:\n%s", ropts, err, &out, &errOut)
+		}
+		return out.String()
+	}
+
+	// First run: the job and the maintenance tasks are all due.
+	if out := run(scheduler.Options{}); !strings.Contains(out, "docs: snapshot ") {
+		t.Fatalf("first run:\n%s", out)
+	}
+	if out := run(scheduler.Options{}); out != "No job is due.\n" {
+		t.Fatalf("second run:\n%s", out)
+	}
+	if out := run(scheduler.Options{Job: "docs", Force: true}); !strings.Contains(out, "docs: snapshot ") {
+		t.Fatalf("forced run:\n%s", out)
+	}
+
+	cfg, err := config.Load(c.cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := newBackend(cfg, c.cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snaps, err := b.Snapshots(context.Background(), backend.SnapshotFilter{Tags: []string{backend.JobTag("docs")}})
+	if err != nil || len(snaps) != 2 {
+		t.Fatalf("snapshots: %v, %v", snaps, err)
+	}
+	recs, _, err := state.ReadHistory(filepath.Join(c.dir, state.HistoryFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]int{}
+	for _, r := range recs {
+		if !r.OK {
+			t.Errorf("history record failed: %+v", r)
+		}
+		kinds[r.Kind]++
+	}
+	if kinds[state.KindBackup] != 2 || kinds[state.KindPrune] != 1 || kinds[state.KindCheck] != 1 {
+		t.Fatalf("history kinds %v", kinds)
+	}
 }
