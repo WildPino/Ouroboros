@@ -56,7 +56,7 @@ behaviour changed.
 ## M4 — Scheduler, state, locking
 
 - [x] `state.json` atomic persistence, `history.jsonl` append/read
-- [ ] Named mutex single-instance lock
+- [x] Named mutex single-instance lock
 - [ ] Due-job computation (interval, retry_after) with tests using a fake clock
 - [ ] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
