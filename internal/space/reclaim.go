@@ -353,3 +353,13 @@ func (r *Reclaimer) RecoverFromFullDisk(ctx context.Context, predicted uint64) (
 	rep.Prunes++
 	return rep, err
 }
+
+// CheckFits fails with ErrBackupTooLarge when a backup expected to add
+// growth bytes could not fit even with an empty repository.
+func (r *Reclaimer) CheckFits(growth uint64) error {
+	u, err := r.Disk.Usage(r.RepoPath)
+	if err != nil {
+		return fmt.Errorf("measure repository partition: %w", err)
+	}
+	return r.Targets.CheckFits(growth, u.Total)
+}

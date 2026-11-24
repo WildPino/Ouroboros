@@ -58,7 +58,7 @@ behaviour changed.
 - [x] `state.json` atomic persistence, `history.jsonl` append/read
 - [x] Named mutex single-instance lock
 - [x] Due-job computation (interval, retry_after) with tests using a fake clock
-- [ ] `run` orchestration: retention → space check → backup → post-check →
+- [x] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
 - [ ] `run --job NAME --force`
 - [ ] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
