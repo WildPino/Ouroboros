@@ -17,12 +17,12 @@ behaviour changed.
 
 ## M1 — Config and CLI skeleton
 
-- [ ] CLI framework (standard `flag` with subcommands, or `spf13/cobra`)
-- [ ] `version`, `config init`, `config validate`
+- [x] CLI framework (standard `flag` with subcommands, or `spf13/cobra`)
+- [x] `version`, `config init`, `config validate`
 - [x] Config types with `Size` (bytes or percent) and `Duration` (with `d`) parsing
 - [x] Defaults and validation rules (DESIGN.md §10), unknown keys rejected
 - [x] Unit tests for every validation rule
-- [ ] `doctor`: config, admin rights, restic present and ≥ 0.17, repo path writable,
+- [x] `doctor`: config, admin rights, restic present and ≥ 0.17, repo path writable,
       partition free space, VSS service available
 
 ## M2 — Secrets and restic backend
