@@ -74,7 +74,7 @@ behaviour changed.
 
 ## M6 — Hardening
 
-- [ ] Interrupt tests: kill during backup, during prune; repository still passes check
+- [x] Interrupt tests: kill during backup, during prune; repository still passes check
 - [ ] Disk-full end-to-end test on a small VHDX (documented manual procedure in
       `docs/TESTING.md`)
 - [ ] Locked-file test with VSS on and off
