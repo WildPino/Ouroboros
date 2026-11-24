@@ -32,6 +32,10 @@ longer simulation than the default.
 
 ## Tests that need an elevated console
 
+If PowerShell refuses to run the scripts below because of the execution
+policy, start them with
+`powershell -ExecutionPolicy Bypass -File .\scripts\<name>.ps1 <arguments>`.
+
 Tests whose name contains `Admin` use system facilities, such as Volume
 Shadow Copies, and run only with `OUROBOROS_ADMIN_TESTS=1` in an elevated
 console. Otherwise they are skipped.
