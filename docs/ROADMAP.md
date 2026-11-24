@@ -29,13 +29,13 @@ behaviour changed.
 
 - [x] `internal/secret`: DPAPI machine-scope encrypt/decrypt, ACL on `secret.bin`
 - [ ] Hidden `internal password` subcommand for `--password-command`
-- [ ] Process runner: job object, timeout, priority, streaming stdout/stderr
-- [ ] restic: `Version`, `Init` (format v2), `Snapshots`, `Forget`, `Prune`, `Check`,
+- [x] Process runner: job object, timeout, priority, streaming stdout/stderr
+- [x] restic: `Version`, `Init` (format v2), `Snapshots`, `Forget`, `Prune`, `Check`,
       `Restore`, `Tag`
-- [ ] restic: `Backup` with JSON progress/summary parsing, VSS flag, tags, excludes
-- [ ] Exit code → typed error mapping (exit 3 = warning)
-- [ ] Recorded JSON fixtures + parser tests
-- [ ] Integration tests with real restic in temp dirs (skipped when unavailable)
+- [x] restic: `Backup` with JSON progress/summary parsing, VSS flag, tags, excludes
+- [x] Exit code → typed error mapping (exit 3 = warning)
+- [x] Recorded JSON fixtures + parser tests
+- [x] Integration tests with real restic in temp dirs (skipped when unavailable)
 - [ ] `init` command (password prompt twice, store secret, create repo, create ballast,
       print "record your password" warning)
 

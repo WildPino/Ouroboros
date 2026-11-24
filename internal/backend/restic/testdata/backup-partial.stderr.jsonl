@@ -1,0 +1,2 @@
+{"message_type":"error","error":{"message":"incomplete metadata for C:\\data\\src\\locked.txt: get EA failed while opening file handle for path C:\\data\\src\\locked.txt, with: Access is denied."},"during":"archival","item":"C:\\data\\src\\locked.txt"}
+{"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}
