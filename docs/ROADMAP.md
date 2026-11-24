@@ -57,7 +57,7 @@ behaviour changed.
 
 - [x] `state.json` atomic persistence, `history.jsonl` append/read
 - [x] Named mutex single-instance lock
-- [ ] Due-job computation (interval, retry_after) with tests using a fake clock
+- [x] Due-job computation (interval, retry_after) with tests using a fake clock
 - [ ] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
 - [ ] `run --job NAME --force`

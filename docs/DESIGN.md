@@ -215,8 +215,15 @@ If a backup fails because the disk is full:
   (configurable).
 - `ouroboros run` acquires a global named mutex `Global\Ouroboros`; if already
   held, it exits immediately with code 0 (another run in progress).
-- A job is due when `now ≥ last_success + interval` or the last attempt failed
-  and `now ≥ last_attempt + retry_after` (default 30 min).
+- A job is due when `now ≥ last_success + interval`, or, if the last attempt
+  failed, when `now ≥ last_attempt + retry_after` (default 30 min). After a
+  failure only `retry_after` counts, so a failing job is retried every
+  `retry_after` instead of on every tick. An attempt with no recorded outcome
+  (the process was killed) counts as failed. A job that never ran is due
+  immediately.
+- If a recorded time lies more than 5 minutes in the future (the system clock
+  was set back), the task is due: waiting for the clock to catch up could stop
+  backups for an arbitrary time.
 - Jobs run sequentially, in config order.
 - Maintenance tasks (normal prune, `check`) run after jobs, when due.
 
