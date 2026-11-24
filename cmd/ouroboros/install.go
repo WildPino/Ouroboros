@@ -1,0 +1,203 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/WildPino/ouroboros/internal/backend/restic"
+	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/platform/windows"
+	"github.com/WildPino/ouroboros/internal/secret"
+)
+
+// taskScheduler registers the scheduled task, replaceable in tests.
+type taskScheduler interface {
+	Create(ctx context.Context, name string, def []byte) error
+	Delete(ctx context.Context, name string) error
+	Exists(ctx context.Context, name string) (bool, error)
+}
+
+type systemTasks struct{}
+
+func (systemTasks) Create(ctx context.Context, name string, def []byte) error {
+	return windows.CreateTask(ctx, name, def)
+}
+
+func (systemTasks) Delete(ctx context.Context, name string) error {
+	return windows.DeleteTask(ctx, name)
+}
+
+func (systemTasks) Exists(ctx context.Context, name string) (bool, error) {
+	return windows.TaskExists(ctx, name)
+}
+
+type installDeps struct {
+	isElevated       func() (bool, error)
+	executable       func() (string, error)
+	findRestic       func(configured string) (string, error)
+	untrustedWriters func(path string) ([]string, error)
+	tasks            taskScheduler
+	now              func() time.Time
+	tempDir          func() string
+}
+
+func defaultInstallDeps() installDeps {
+	return installDeps{
+		isElevated:       windows.IsElevated,
+		executable:       os.Executable,
+		findRestic:       restic.FindExecutable,
+		untrustedWriters: windows.UntrustedWriters,
+		tasks:            systemTasks{},
+		now:              time.Now,
+		tempDir:          os.TempDir,
+	}
+}
+
+func newInstallCmd(opts *options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "install",
+		Short: "Install the scheduled task that runs the backups",
+		Long: "Register the scheduled task " + windows.TaskName + ", which runs \"ouroboros run\" as\n" +
+			"SYSTEM every schedule.tick, catching up on runs missed while the computer was off.\n" +
+			"Running install again updates the task. Must be run as Administrator.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInstall(cmd.Context(), opts, defaultInstallDeps())
+		},
+	}
+}
+
+func newUninstallCmd(opts *options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the scheduled task",
+		Long: "Remove the scheduled task " + windows.TaskName + ". The repository, the configuration\n" +
+			"and the stored password are left untouched.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runUninstall(cmd.Context(), opts, defaultInstallDeps())
+		},
+	}
+}
+
+func requireElevation(d installDeps, what string) error {
+	elevated, err := d.isElevated()
+	if err != nil {
+		return fmt.Errorf("check privileges: %w", err)
+	}
+	if !elevated {
+		return fmt.Errorf("%s must be run as Administrator", what)
+	}
+	return nil
+}
+
+func runInstall(ctx context.Context, opts *options, d installDeps) error {
+	cfg, err := config.Load(opts.configPath)
+	if err != nil {
+		return err
+	}
+	if err := requireElevation(d, "install"); err != nil {
+		return err
+	}
+	cfgPath, err := filepath.Abs(opts.configPath)
+	if err != nil {
+		return err
+	}
+	if exists, err := secret.NewStore(secretPath(cfgPath)).Exists(); err != nil {
+		return err
+	} else if !exists {
+		return errors.New("no repository password is stored: run \"ouroboros init\" first")
+	}
+	exe, err := d.executable()
+	if err != nil {
+		return fmt.Errorf("locate ouroboros executable: %w", err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	// "go run" and similar leave the binary in a temporary directory that
+	// disappears; the task would then fail on every tick.
+	if tmp, err := filepath.EvalSymlinks(d.tempDir()); err == nil && config.IsWithin(exe, tmp) {
+		return fmt.Errorf("%s is in a temporary directory: copy ouroboros.exe to a permanent location first", exe)
+	}
+	resticExe, err := d.findRestic(cfg.Repository.ResticPath)
+	if err != nil {
+		return err
+	}
+
+	warnings := installWarnings(d, exe, resticExe, cfgPath)
+
+	def, err := windows.TaskXML(windows.TaskSpec{
+		Command:      exe,
+		Arguments:    `run --config "` + cfgPath + `"`,
+		Interval:     cfg.Schedule.Tick.Std(),
+		RunOnBattery: cfg.Schedule.RunOnBattery,
+		Start:        d.now().Truncate(time.Minute),
+		Description:  "Runs due Ouroboros backups and maintenance.",
+	})
+	if err != nil {
+		return err
+	}
+	if err := d.tasks.Create(ctx, windows.TaskName, def); err != nil {
+		return err
+	}
+	fmt.Fprintf(opts.stdout, "Installed scheduled task %s: runs every %s as SYSTEM.\n", windows.TaskName, cfg.Schedule.Tick.Std())
+	fmt.Fprintf(opts.stdout, "  %s run --config \"%s\"\n", exe, cfgPath)
+	if len(warnings) > 0 {
+		for _, w := range warnings {
+			fmt.Fprintln(opts.stderr, "warning:", w)
+		}
+		return &codedError{code: exitWarnings}
+	}
+	return nil
+}
+
+// installWarnings reports files that the SYSTEM task executes or trusts
+// and that accounts other than the administrators can modify: whatever
+// they put there would run as SYSTEM.
+func installWarnings(d installDeps, exe, resticExe, cfgPath string) []string {
+	paths := []string{exe, filepath.Dir(exe), resticExe, filepath.Dir(resticExe), cfgPath, filepath.Dir(cfgPath)}
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range paths {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		writers, err := d.untrustedWriters(p)
+		if err != nil {
+			out = append(out, fmt.Sprintf("cannot check the permissions of %s: %v", p, err))
+			continue
+		}
+		if len(writers) > 0 {
+			out = append(out, fmt.Sprintf("%s can be modified by %v, and the task runs it as SYSTEM: "+
+				"move it to a folder only administrators can change, such as Program Files", p, writers))
+		}
+	}
+	return out
+}
+
+func runUninstall(ctx context.Context, opts *options, d installDeps) error {
+	if err := requireElevation(d, "uninstall"); err != nil {
+		return err
+	}
+	exists, err := d.tasks.Exists(ctx, windows.TaskName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		fmt.Fprintf(opts.stdout, "Scheduled task %s is not installed.\n", windows.TaskName)
+		return nil
+	}
+	if err := d.tasks.Delete(ctx, windows.TaskName); err != nil {
+		return err
+	}
+	fmt.Fprintf(opts.stdout, "Removed scheduled task %s.\n", windows.TaskName)
+	return nil
+}

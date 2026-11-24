@@ -61,7 +61,7 @@ behaviour changed.
 - [x] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
 - [x] `run --job NAME --force`
-- [ ] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
+- [x] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
       (missed-run catch-up, battery setting)
 
 ## M5 — User-facing commands and logging
