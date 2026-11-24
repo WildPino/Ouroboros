@@ -10,10 +10,10 @@ behaviour changed.
 - [x] `go mod init github.com/<owner>/ouroboros`, Go version pinned in `go.mod`
 - [x] Directory layout as in DESIGN.md §2
 - [x] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
-- [ ] `.editorconfig`, `gofmt` enforced
-- [ ] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
+- [x] `.editorconfig`, `gofmt` enforced
+- [x] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
 - [ ] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
-- [ ] Version injection at build time (`-ldflags -X main.version=...`)
+- [x] Version injection at build time (`-ldflags -X main.version=...`)
 
 ## M1 — Config and CLI skeleton
 
