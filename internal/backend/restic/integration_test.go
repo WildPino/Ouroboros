@@ -109,6 +109,16 @@ func TestIntegrationLifecycle(t *testing.T) {
 	}
 
 	job := backend.Job{Name: "docs", Paths: []string{src}, Exclude: []string{"*.tmp"}}
+	estimate, err := b.EstimateBackup(ctx, job)
+	if err != nil {
+		t.Fatalf("EstimateBackup: %v", err)
+	}
+	if estimate == 0 {
+		t.Fatal("estimate of a first backup is zero")
+	}
+	if snaps, _ := b.Snapshots(ctx, backend.SnapshotFilter{}); len(snaps) != 0 {
+		t.Fatal("EstimateBackup created a snapshot")
+	}
 	first, err := b.Backup(ctx, job)
 	if err != nil {
 		t.Fatalf("first backup: %v", err)

@@ -128,28 +128,10 @@ func (b *Restic) Init(ctx context.Context) error {
 // Backup creates a snapshot of job. A partial backup (some files unreadable)
 // is not an error: it returns Incomplete and the per-file warnings.
 func (b *Restic) Backup(ctx context.Context, job backend.Job) (backend.BackupResult, error) {
-	if len(job.Paths) == 0 {
-		return backend.BackupResult{}, errors.New("restic backup: no paths")
+	args, err := b.backupArgs(job, false)
+	if err != nil {
+		return backend.BackupResult{}, err
 	}
-	args := []string{"backup", "--json",
-		"--host", b.opts.Hostname,
-		"--tag", backend.TagOuroboros,
-		"--tag", backend.JobTag(job.Name),
-	}
-	if job.VSS {
-		args = append(args, "--use-fs-snapshot")
-	}
-	for _, ex := range job.Exclude {
-		args = append(args, "--exclude", ex)
-	}
-	if job.ExcludeFile != "" {
-		args = append(args, "--exclude-file", job.ExcludeFile)
-	}
-	if b.opts.ReadConcurrency > 0 {
-		args = append(args, "--read-concurrency", strconv.Itoa(b.opts.ReadConcurrency))
-	}
-	args = append(args, "--")
-	args = append(args, job.Paths...)
 
 	res := backend.BackupResult{Start: time.Now()}
 	gotSummary := false
@@ -181,6 +163,66 @@ func (b *Restic) Backup(ctx context.Context, job backend.Job) (backend.BackupRes
 		return res, errors.New("restic backup: finished without reporting a snapshot")
 	}
 	return res, nil
+}
+
+func (b *Restic) backupArgs(job backend.Job, dryRun bool) ([]string, error) {
+	if len(job.Paths) == 0 {
+		return nil, errors.New("restic backup: no paths")
+	}
+	args := []string{"backup", "--json",
+		"--host", b.opts.Hostname,
+		"--tag", backend.TagOuroboros,
+		"--tag", backend.JobTag(job.Name),
+	}
+	if dryRun {
+		args = append(args, "--dry-run")
+	}
+	if job.VSS {
+		args = append(args, "--use-fs-snapshot")
+	}
+	for _, ex := range job.Exclude {
+		args = append(args, "--exclude", ex)
+	}
+	if job.ExcludeFile != "" {
+		args = append(args, "--exclude-file", job.ExcludeFile)
+	}
+	if b.opts.ReadConcurrency > 0 {
+		args = append(args, "--read-concurrency", strconv.Itoa(b.opts.ReadConcurrency))
+	}
+	args = append(args, "--")
+	return append(args, job.Paths...), nil
+}
+
+// EstimateBackup runs "restic backup --dry-run" for job and returns the
+// uncompressed size of the data that a real backup would add.
+func (b *Restic) EstimateBackup(ctx context.Context, job backend.Job) (uint64, error) {
+	args, err := b.backupArgs(job, true)
+	if err != nil {
+		return 0, err
+	}
+	var res backend.BackupResult
+	gotSummary := false
+	_, err = b.r.run(ctx, call{
+		args:    args,
+		timeout: b.opts.Timeouts.Backup,
+		onLine: func(line []byte) error {
+			ok, err := parseBackupLine(line, &res)
+			gotSummary = gotSummary || ok
+			return err
+		},
+	})
+	// Unreadable files only make the estimate smaller; the estimate is
+	// still usable.
+	if errors.Is(err, ErrIncomplete) && gotSummary {
+		err = nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !gotSummary {
+		return 0, errors.New("restic backup --dry-run: finished without a summary")
+	}
+	return res.BytesAdded, nil
 }
 
 // Snapshots lists snapshots matching filter, oldest first.

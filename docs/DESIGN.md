@@ -52,6 +52,7 @@ type Backend interface {
     Version(ctx context.Context) (string, error)
     Init(ctx context.Context) error
     Backup(ctx context.Context, job Job) (BackupResult, error)
+    EstimateBackup(ctx context.Context, job Job) (uint64, error) // dry run
     Snapshots(ctx context.Context, filter SnapshotFilter) ([]Snapshot, error)
     Forget(ctx context.Context, ids []string) error
     Prune(ctx context.Context, opts PruneOptions) (PruneResult, error)
