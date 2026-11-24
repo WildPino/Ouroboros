@@ -6,14 +6,14 @@ behaviour changed.
 
 ## M0 — Project setup
 
-- [ ] Choose the license (default: MIT) and add `LICENSE`
-- [ ] `go mod init github.com/<owner>/ouroboros`, Go version pinned in `go.mod`
-- [ ] Directory layout as in DESIGN.md §2
-- [ ] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
-- [ ] `.editorconfig`, `gofmt` enforced
-- [ ] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
-- [ ] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
-- [ ] Version injection at build time (`-ldflags -X main.version=...`)
+- [x] Choose the license (default: MIT) and add `LICENSE`
+- [x] `go mod init github.com/<owner>/ouroboros`, Go version pinned in `go.mod`
+- [x] Directory layout as in DESIGN.md §2
+- [x] `.gitignore` (build output, `dist/`, test artifacts, `*.ballast`)
+- [x] `.editorconfig`, `gofmt` enforced
+- [x] `Makefile` or `build.ps1` with targets: build, test, lint, release-snapshot
+- [x] GitHub Actions on `windows-latest`: vet, staticcheck, test, build
+- [x] Version injection at build time (`-ldflags -X main.version=...`)
 
 ## M1 — Config and CLI skeleton
 

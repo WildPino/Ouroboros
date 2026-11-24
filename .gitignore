@@ -1,0 +1,12 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Test artifacts
+*.test
+*.out
+coverage.*
+
+# Emergency ballast files created during manual testing
+*.ballast
