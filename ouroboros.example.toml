@@ -1,0 +1,65 @@
+# Ouroboros configuration
+# Location: C:\ProgramData\Ouroboros\ouroboros.toml
+# Sizes: B, KB, MB, GB, TB (powers of 1024). Durations: 30m, 6h, 7d.
+# Use single quotes for Windows paths so backslashes are taken literally.
+
+[repository]
+path = 'B:\ouroboros'            # directory on the dedicated partition
+restic_path = ''                 # empty = find restic.exe on PATH
+compression = "max"              # off | auto | max
+
+[space]
+min_free = "10%"                 # always leave this free ("50GB" or "10%")
+max_repo_size = ""               # optional hard cap, e.g. "1.5TB"; empty = whole partition
+keep_min_snapshots = 3           # per job, newest N are never deleted
+protect_newer_than = "24h"       # snapshots younger than this are never deleted
+growth_factor = 1.5              # safety multiplier on predicted growth
+first_run_factor = 1.0           # multiplier on dry-run size for a job's first backup
+prune_headroom = "2%"            # space reserved for prune itself (min 1GB)
+reserve_file_size = "2GB"        # emergency ballast file; "0" disables
+prune_interval = "7d"            # routine prune when there is no space pressure
+
+# Optional time-based thinning, applied before capacity checks.
+# Leave everything at 0 to let capacity alone decide.
+[retention]
+keep_hourly = 0
+keep_daily = 0
+keep_weekly = 0
+keep_monthly = 0
+keep_yearly = 0
+
+[schedule]
+tick = "15m"                     # how often the scheduled task wakes up
+retry_after = "30m"              # retry delay after a failed job
+run_on_battery = false
+
+[integrity]
+check_interval = "7d"
+check_read_data_interval = "30d"
+check_read_data_percent = 5
+
+[performance]
+memory_profile = "auto"          # low | auto | high
+read_concurrency = 0             # 0 = from profile
+pack_size_mb = 0                 # 0 = from profile
+process_priority = "below_normal" # idle | below_normal | normal
+
+[logging]
+level = "info"                   # debug | info | warn | error
+keep_days = 30
+event_log = true
+
+[[job]]
+name = "documents"
+paths = ['C:\Users\me\Documents', 'D:\Projects']
+exclude = ['**\node_modules', '**\.cache', '**\*.tmp']
+exclude_file = ''                # optional file with one pattern per line
+interval = "6h"
+vss = true
+
+[[job]]
+name = "data-volume"
+paths = ['E:\']
+exclude = ['E:\$RECYCLE.BIN', 'E:\System Volume Information']
+interval = "24h"
+vss = true
