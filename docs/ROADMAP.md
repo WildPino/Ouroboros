@@ -55,13 +55,13 @@ behaviour changed.
 
 ## M4 — Scheduler, state, locking
 
-- [ ] `state.json` atomic persistence, `history.jsonl` append/read
-- [ ] Named mutex single-instance lock
-- [ ] Due-job computation (interval, retry_after) with tests using a fake clock
-- [ ] `run` orchestration: retention → space check → backup → post-check →
+- [x] `state.json` atomic persistence, `history.jsonl` append/read
+- [x] Named mutex single-instance lock
+- [x] Due-job computation (interval, retry_after) with tests using a fake clock
+- [x] `run` orchestration: retention → space check → backup → post-check →
       maintenance (routine prune, check)
-- [ ] `run --job NAME --force`
-- [ ] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
+- [x] `run --job NAME --force`
+- [x] `install` / `uninstall`: Task Scheduler task as SYSTEM via COM or `schtasks` XML
       (missed-run catch-up, battery setting)
 
 ## M5 — User-facing commands and logging

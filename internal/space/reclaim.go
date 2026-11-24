@@ -53,6 +53,10 @@ type Reclaimer struct {
 	Ballast     Ballast
 	BallastSize uint64 // 0 = ballast disabled
 	Log         *slog.Logger
+
+	// prunePending is set when snapshots were forgotten without a prune
+	// afterwards, so their space is not free yet.
+	prunePending bool
 }
 
 // Report describes what a reclaim did.
@@ -154,6 +158,21 @@ func (r *Reclaimer) reclaim(ctx context.Context, growth uint64, ballastGone bool
 		return rep, nil
 	}
 
+	if r.prunePending {
+		// Snapshots already forgotten (by retention) still hold their
+		// space; free it before deleting more history.
+		if err := r.prune(ctx, &rep, "0"); err != nil {
+			return rep, err
+		}
+		if m, err = r.measure(ctx); err != nil {
+			return rep, err
+		}
+		rep.FreeAfter = m.usage.Free
+		if missing, over := g.shortfall(m.usage.Free, m.repoSize); missing == 0 && !over {
+			return rep, nil
+		}
+	}
+
 	sel, err := r.selection(ctx)
 	if err != nil {
 		return rep, err
@@ -183,13 +202,9 @@ func (r *Reclaimer) reclaim(ctx context.Context, growth uint64, ballastGone bool
 		rep.Forgotten = append(rep.Forgotten, victims...)
 		log.Info("forgot snapshots", "count", len(ids), "ids", ids)
 
-		if err := r.ensurePruneRoom(ctx, &rep); err != nil {
+		if err := r.prune(ctx, &rep, "0"); err != nil {
 			return rep, err
 		}
-		if _, err := r.Repo.Prune(ctx, backend.PruneOptions{MaxUnused: "0"}); err != nil {
-			return rep, fmt.Errorf("prune: %w", err)
-		}
-		rep.Prunes++
 
 		if m, err = r.measure(ctx); err != nil {
 			return rep, err
@@ -201,6 +216,32 @@ func (r *Reclaimer) reclaim(ctx context.Context, growth uint64, ballastGone bool
 		}
 		batch = min(batch*2, maxBatch)
 	}
+}
+
+// prune runs restic prune, first deleting the ballast if prune would lack
+// room to write.
+func (r *Reclaimer) prune(ctx context.Context, rep *Report, maxUnused string) error {
+	if err := r.ensurePruneRoom(ctx, rep); err != nil {
+		return err
+	}
+	if _, err := r.Repo.Prune(ctx, backend.PruneOptions{MaxUnused: maxUnused}); err != nil {
+		return fmt.Errorf("prune: %w", err)
+	}
+	r.prunePending = false
+	rep.Prunes++
+	return nil
+}
+
+// RoutinePrune is the periodic prune without space pressure
+// (DESIGN.md §3.6), which leaves up to maxUnused of unused space to avoid
+// heavy repacking.
+func (r *Reclaimer) RoutinePrune(ctx context.Context, maxUnused string) (Report, error) {
+	var rep Report
+	err := r.prune(ctx, &rep, maxUnused)
+	if rep.BallastDeleted {
+		rep.BallastRecreated = r.restoreBallast(ctx, r.goal(0), &rep)
+	}
+	return rep, err
 }
 
 // ensurePruneRoom deletes the ballast when free space is below the headroom
@@ -307,7 +348,18 @@ func (r *Reclaimer) RecoverFromFullDisk(ctx context.Context, predicted uint64) (
 	if _, err := r.Repo.Prune(ctx, backend.PruneOptions{}); err != nil {
 		return Report{BallastDeleted: ballastGone}, fmt.Errorf("prune after full disk: %w", err)
 	}
+	r.prunePending = false
 	rep, err := r.reclaim(ctx, addSat(predicted, predicted), ballastGone)
 	rep.Prunes++
 	return rep, err
+}
+
+// CheckFits fails with ErrBackupTooLarge when a backup expected to add
+// growth bytes could not fit even with an empty repository.
+func (r *Reclaimer) CheckFits(growth uint64) error {
+	u, err := r.Disk.Usage(r.RepoPath)
+	if err != nil {
+		return fmt.Errorf("measure repository partition: %w", err)
+	}
+	return r.Targets.CheckFits(growth, u.Total)
 }

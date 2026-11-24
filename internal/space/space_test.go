@@ -490,3 +490,14 @@ func TestBallastFile(t *testing.T) {
 		t.Fatal(n, err)
 	}
 }
+
+func TestReclaimerCheckFits(t *testing.T) {
+	s := newScripted(1, MB)
+	r := reclaimerFor(s)
+	if err := r.CheckFits(10 * MB); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CheckFits(s.total); !errors.Is(err, ErrBackupTooLarge) {
+		t.Fatalf("got %v", err)
+	}
+}

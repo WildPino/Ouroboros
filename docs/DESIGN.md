@@ -183,8 +183,16 @@ tidy without heavy repacking.
 ### 3.7 Optional time-based retention
 
 `[retention]` (`keep_hourly`, `keep_daily`, `keep_weekly`, `keep_monthly`,
-`keep_yearly`) maps to `restic forget --keep-*` per job and runs before
-capacity checks. Empty by default: capacity alone decides.
+`keep_yearly`) uses the semantics of `restic forget --keep-*`, applied to each
+job separately: walking from the newest snapshot, each rule keeps the newest
+snapshot of each of the last N hours/days/weeks/months/years, in local time.
+It runs before capacity checks. Empty by default: capacity alone decides.
+
+The selection is computed by the space manager, not by restic, so that the
+protections of §3.5 hold here too: the `keep_min_snapshots` newest of each
+job, snapshots newer than `protect_newer_than` and pinned snapshots are never
+forgotten, whatever the rules say. Retention only forgets; the following
+space check prunes the forgotten data before deleting anything else.
 
 ### 3.8 Ballast file
 
@@ -215,8 +223,15 @@ If a backup fails because the disk is full:
   (configurable).
 - `ouroboros run` acquires a global named mutex `Global\Ouroboros`; if already
   held, it exits immediately with code 0 (another run in progress).
-- A job is due when `now ≥ last_success + interval` or the last attempt failed
-  and `now ≥ last_attempt + retry_after` (default 30 min).
+- A job is due when `now ≥ last_success + interval`, or, if the last attempt
+  failed, when `now ≥ last_attempt + retry_after` (default 30 min). After a
+  failure only `retry_after` counts, so a failing job is retried every
+  `retry_after` instead of on every tick. An attempt with no recorded outcome
+  (the process was killed) counts as failed. A job that never ran is due
+  immediately.
+- If a recorded time lies more than 5 minutes in the future (the system clock
+  was set back), the task is due: waiting for the clock to catch up could stop
+  backups for an arbitrary time.
 - Jobs run sequentially, in config order.
 - Maintenance tasks (normal prune, `check`) run after jobs, when due.
 

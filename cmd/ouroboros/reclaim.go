@@ -30,7 +30,15 @@ func newReclaimCmd(opts *options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := newReclaimer(cfg, opts.configPath)
+			b, err := newResticBackend(cfg, opts.configPath)
+			if err != nil {
+				return err
+			}
+			host, err := os.Hostname()
+			if err != nil {
+				return err
+			}
+			r, err := newReclaimer(cfg, b, host)
 			if err != nil {
 				return err
 			}
@@ -46,23 +54,16 @@ func newReclaimCmd(opts *options) *cobra.Command {
 	return cmd
 }
 
-// newReclaimer wires the space manager to the real machine for cfg.
-func newReclaimer(cfg *config.Config, configPath string) (*space.Reclaimer, error) {
-	b, err := newResticBackend(cfg, configPath)
-	if err != nil {
-		return nil, err
-	}
-	host, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
+// newReclaimer wires the space manager to the real disk for cfg. host must
+// be the hostname the backend records in snapshots.
+func newReclaimer(cfg *config.Config, repo space.Repository, host string) (*space.Reclaimer, error) {
 	disk := space.SystemDisk{}
 	u, err := disk.Usage(cfg.Repository.Path)
 	if err != nil {
 		return nil, fmt.Errorf("measure repository partition: %w", err)
 	}
 	return &space.Reclaimer{
-		Repo:     b,
+		Repo:     repo,
 		Disk:     disk,
 		Sizer:    space.DirSizer{},
 		Clock:    space.SystemClock{},
