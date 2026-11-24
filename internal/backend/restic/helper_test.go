@@ -65,6 +65,18 @@ func fakeRestic(mode string) int {
 		return 1
 	case "priority":
 		fmt.Print(priorityClass())
+	case "locked-once", "locked-live":
+		// arg is a log file shared by the successive processes.
+		cmd := argsAfterDashDash()[2]
+		f, _ := os.OpenFile(arg, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		fmt.Fprintln(f, cmd)
+		f.Close()
+		log, _ := os.ReadFile(arg)
+		if cmd == "unlock" || (name == "locked-once" && strings.Contains(string(log), "unlock")) {
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, `{"message_type":"exit_error","code":11,"message":"Fatal: repository is already locked"}`+"\n")
+		return 11
 	default:
 		fmt.Fprintln(os.Stderr, "unknown fake mode", mode)
 		return 99

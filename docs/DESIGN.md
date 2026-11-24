@@ -81,6 +81,13 @@ i.e. actual growth on disk).
 - Snapshots are attributed to jobs exclusively through the `job:<name>` tag.
 - Pinned snapshots carry the tag `ouroboros:pinned`.
 - Never use `--no-lock`. Never touch files inside the repository directly.
+- A restic process killed by a crash or a power loss leaves its lock in the
+  repository, and restic does not remove it by itself before exclusive
+  operations (prune, check). When a command fails because the repository is
+  locked, Ouroboros runs `restic unlock` without `--remove-all`, which removes
+  only stale locks (process gone from this host, or not refreshed for 30
+  minutes), and retries the command once. The lock of a running process is
+  never removed.
 - Exit codes are mapped to typed errors (wrong password, repository locked,
   repository missing, partial backup with unreadable files, fatal).
   restic exit code 3 (some source files unreadable, snapshot still created) is
