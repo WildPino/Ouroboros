@@ -183,8 +183,16 @@ tidy without heavy repacking.
 ### 3.7 Optional time-based retention
 
 `[retention]` (`keep_hourly`, `keep_daily`, `keep_weekly`, `keep_monthly`,
-`keep_yearly`) maps to `restic forget --keep-*` per job and runs before
-capacity checks. Empty by default: capacity alone decides.
+`keep_yearly`) uses the semantics of `restic forget --keep-*`, applied to each
+job separately: walking from the newest snapshot, each rule keeps the newest
+snapshot of each of the last N hours/days/weeks/months/years, in local time.
+It runs before capacity checks. Empty by default: capacity alone decides.
+
+The selection is computed by the space manager, not by restic, so that the
+protections of §3.5 hold here too: the `keep_min_snapshots` newest of each
+job, snapshots newer than `protect_newer_than` and pinned snapshots are never
+forgotten, whatever the rules say. Retention only forgets; the following
+space check prunes the forgotten data before deleting anything else.
 
 ### 3.8 Ballast file
 
