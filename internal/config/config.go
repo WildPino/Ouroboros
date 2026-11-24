@@ -26,6 +26,7 @@ type Config struct {
 	Integrity   Integrity   `toml:"integrity"`
 	Performance Performance `toml:"performance"`
 	Logging     Logging     `toml:"logging"`
+	Timeouts    Timeouts    `toml:"timeouts"`
 	Jobs        []Job       `toml:"job"`
 }
 
@@ -93,6 +94,17 @@ type Logging struct {
 	EventLog bool   `toml:"event_log"`
 }
 
+// Timeouts bound each kind of restic operation. They exist to stop a hung
+// process, not to limit normal work.
+type Timeouts struct {
+	Backup  Duration `toml:"backup"`
+	Prune   Duration `toml:"prune"`
+	Check   Duration `toml:"check"`
+	Restore Duration `toml:"restore"`
+	// Other covers init, snapshots, forget and tag.
+	Other Duration `toml:"other"`
+}
+
 // Job is one set of paths backed up on its own interval.
 type Job struct {
 	Name        string   `toml:"name"`
@@ -139,6 +151,13 @@ func Default() Config {
 			Level:    "info",
 			KeepDays: 30,
 			EventLog: true,
+		},
+		Timeouts: Timeouts{
+			Backup:  Duration(3 * day),
+			Prune:   Duration(1 * day),
+			Check:   Duration(2 * day),
+			Restore: Duration(3 * day),
+			Other:   Duration(15 * time.Minute),
 		},
 	}
 }

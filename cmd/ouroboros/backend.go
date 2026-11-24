@@ -43,6 +43,13 @@ func newResticBackend(cfg *config.Config, configPath string) (*restic.Restic, er
 		PackSizeMB:      cfg.Performance.PackSizeMB,
 		ReadConcurrency: cfg.Performance.ReadConcurrency,
 		Priority:        cfg.Performance.ProcessPriority,
+		Timeouts: restic.Timeouts{
+			Short:   cfg.Timeouts.Other.Std(),
+			Backup:  cfg.Timeouts.Backup.Std(),
+			Prune:   cfg.Timeouts.Prune.Std(),
+			Check:   cfg.Timeouts.Check.Std(),
+			Restore: cfg.Timeouts.Restore.Std(),
+		},
 	})
 }
 

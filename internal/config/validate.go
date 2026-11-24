@@ -121,6 +121,13 @@ func (c *Config) Validate() error {
 		p.add("logging.keep_days must be at least 1")
 	}
 
+	// [timeouts]
+	p.positive("timeouts.backup", c.Timeouts.Backup)
+	p.positive("timeouts.prune", c.Timeouts.Prune)
+	p.positive("timeouts.check", c.Timeouts.Check)
+	p.positive("timeouts.restore", c.Timeouts.Restore)
+	p.positive("timeouts.other", c.Timeouts.Other)
+
 	c.validateJobs(&p)
 
 	return p.err()
