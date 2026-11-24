@@ -88,7 +88,10 @@ i.e. actual growth on disk).
 ### 2.3 Process execution
 
 - Child processes are started with a job object so they die with Ouroboros.
-- Every call has a context with a timeout (configurable per operation).
+- Every call has a context with a timeout, configurable per operation in
+  `[timeouts]` (`backup`, `prune`, `check`, `restore`, and `other` for init,
+  snapshots, forget and tag). The defaults (3d, 1d, 2d, 3d, 15m) only stop a
+  hung process; they do not limit normal work.
 - stdout is streamed and parsed line by line; stderr is captured for logs.
 - Process priority for backups: below normal (configurable), so the PC stays
   responsive.
@@ -238,6 +241,18 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
   Administrators so that a normal user cannot change what SYSTEM executes.
 - `restic_path` in config must be an absolute path to a file writable only by
   Administrators; `doctor` warns otherwise.
+
+`init`:
+
+- must run as Administrator, otherwise `secret.bin` could not be protected;
+- requires a password of at least 8 characters that does not start or end
+  with spaces (restic trims the output of the password command, so they would
+  be lost);
+- refuses to run when the repository directory exists and is not empty, or
+  when `secret.bin` already exists; if creating the repository fails, the
+  password it just stored is removed again;
+- skips the ballast with a warning (exit code 3) when creating it would leave
+  less than `min_free`.
 
 ## 7. Performance and memory
 
