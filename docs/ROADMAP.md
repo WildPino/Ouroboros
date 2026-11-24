@@ -68,7 +68,7 @@ behaviour changed.
 
 - [ ] `status` (DESIGN.md §9)
 - [ ] `snapshots`, `restore`, `pin`, `unpin`, `check`
-- [ ] Structured logging with rotation
+- [x] Structured logging with rotation
 - [ ] Windows Event Log source registration (in `install`) and error reporting
 - [ ] Exit codes as specified
 

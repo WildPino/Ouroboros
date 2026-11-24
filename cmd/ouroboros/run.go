@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,6 +14,7 @@ import (
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
 	"github.com/WildPino/ouroboros/internal/lock"
+	"github.com/WildPino/ouroboros/internal/logging"
 	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/scheduler"
 	"github.com/WildPino/ouroboros/internal/space"
@@ -29,6 +28,7 @@ type runDeps struct {
 	checkRestic func(ctx context.Context, cfg *config.Config) error
 	newBackend  func(cfg *config.Config, configPath string) (*restic.Restic, error)
 	hostname    func() (string, error)
+	openEvents  eventOpener
 }
 
 func defaultRunDeps() runDeps {
@@ -38,6 +38,7 @@ func defaultRunDeps() runDeps {
 		checkRestic: checkResticVersion,
 		newBackend:  newResticBackend,
 		hostname:    os.Hostname,
+		openEvents:  logging.OpenEventLog,
 	}
 }
 
@@ -97,7 +98,8 @@ func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d runDe
 	if err != nil {
 		return err
 	}
-	log := newLogger(opts.stderr, cfg.Logging.Level)
+	log, closeLog := openLog(cfg, opts.configPath, opts.stderr, d.openEvents)
+	defer closeLog()
 	r.Log = log
 	dir := filepath.Dir(opts.configPath)
 	runner := &scheduler.Runner{
@@ -183,14 +185,4 @@ func checkResticVersion(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("restic %s is too old: %s or later is required", v, restic.MinVersion)
 	}
 	return nil
-}
-
-// newLogger writes text logs to w. File logs and the Event Log are added
-// by the logging package.
-func newLogger(w io.Writer, level string) *slog.Logger {
-	var l slog.Level
-	if err := l.UnmarshalText([]byte(strings.ToUpper(level))); err != nil {
-		l = slog.LevelInfo
-	}
-	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: l}))
 }
