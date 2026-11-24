@@ -280,7 +280,27 @@ See `ouroboros.example.toml`. Sizes accept `B, KB, MB, GB, TB` (powers of
 
 Validation rejects: overlapping job names, empty paths, relative paths,
 a repository path inside a backed-up path, `min_free` ≥ partition size,
-unknown keys.
+unknown keys. All problems are reported together.
+
+Further rules:
+
+- At least one `[[job]]` is required. Each job needs an `interval`; there is
+  no default. `vss` defaults to `true` when omitted.
+- Job names may contain only letters, digits, `.`, `_` and `-`, and must start
+  with a letter or digit, because they become restic tags (`job:<name>`).
+  Names are compared case-insensitively when checking for duplicates.
+- `keep_min_snapshots` ≥ 1, so the newest snapshot of a job is never deleted.
+- `growth_factor` ≥ 1.0; `first_run_factor` > 0.
+- `tick` ≥ 1 minute (the Task Scheduler minimum repetition interval).
+- `pack_size_mb` is 0 (from profile) or between 4 and 128 (restic limits).
+- Percentages are accepted only for `min_free` and `prune_headroom`;
+  `max_repo_size` and `reserve_file_size` must be absolute.
+- The configuration file may be UTF-8 (with or without BOM) or UTF-16 with
+  BOM, which is what Windows PowerShell 5.1 writes when redirecting output.
+
+`config validate` exits with code 3 (warning) when the repository partition
+cannot be reached, because the `min_free` check against the partition size is
+then skipped.
 
 ## 11. Testing strategy
 
