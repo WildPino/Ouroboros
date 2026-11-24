@@ -48,7 +48,7 @@ behaviour changed.
 - [x] Growth predictor (history-based and first-run dry-run)
 - [x] Candidate selection (min per job, protection window, pinned)
 - [x] Reclaim loop with exponential batching (DESIGN.md §3.5)
-- [ ] `reclaim --dry-run`
+- [x] `reclaim --dry-run`
 - [x] Simulation test harness (fake repo with shared chunks + fixed disk) and
       invariant checks over long random runs
 - [x] Out-of-space recovery path (DESIGN.md §3.9)
