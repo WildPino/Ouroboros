@@ -603,8 +603,20 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    whether Windows 10 LTSC editions ship the runtime; it is checked on such a
    machine if one is available, and the missing-runtime message covers it
    otherwise.
-3. Packaging: which tool embeds the manifest, icon and version information
-   (a new build-time dependency), and the size of the final download.
+3. Packaging. Settled:
+   - `github.com/tc-hib/go-winres`, pinned to v0.3.3 (0BSD-style license),
+     run with `go run` from `build.ps1` and the release workflow. It turns a
+     `winres/winres.json` per executable into `rsrc_windows_amd64.syso`
+     files that `go build` links in: manifest (`requireAdministrator` for
+     `Ouroboros.exe`, `asInvoker` for `ouroboros.exe`), icon, and version
+     information with the release version. It is a build tool only and adds
+     nothing to the program's dependencies. The generated `.syso` files are
+     build output and are not committed.
+   - `ouroboros.exe` and `restic.exe` are stored gzip-compressed (standard
+     library) inside `Ouroboros.exe` and extracted only by install and
+     update, each checked against its SHA-256 after extraction.
+   - Expected download: about 20 MB (restic 40 MB compresses to 14 MB; the
+     command line and the window add about 6 MB).
 4. Uninstall: how `Ouroboros.exe` removes itself, and how an update replaces
    a running executable.
 5. The interactive user's known folders from an elevated process (§12.3).
