@@ -61,6 +61,35 @@ type Runner struct {
 	StallFree     uint64
 	StallTimeout  time.Duration
 	WatchInterval time.Duration
+
+	// Progress, when set, is told when a phase starts and receives the
+	// backup's progress reports. It must return quickly.
+	Progress func(Progress)
+}
+
+// Phases reported through Runner.Progress.
+const (
+	PhaseRetention  = "retention"   // applying the [retention] rules
+	PhasePrepare    = "prepare"     // predicting growth and making room
+	PhaseBackup     = "backup"      // restic backup is running
+	PhaseSpaceCheck = "space_check" // restoring free space after a backup
+	PhasePrune      = "prune"       // routine prune
+	PhaseCheck      = "check"       // repository check
+)
+
+// Progress describes what a run is doing.
+type Progress struct {
+	Phase string
+	// Job is empty for retention, prune and check.
+	Job string
+	// Backup is set during PhaseBackup once restic reports progress.
+	Backup *backend.BackupProgress
+}
+
+func (r *Runner) report(p Progress) {
+	if r.Progress != nil {
+		r.Progress(p)
+	}
 }
 
 // Defaults for the full-disk watch.
@@ -216,6 +245,7 @@ func (r *Runner) retention(ctx context.Context, res *Result) {
 	if loc == nil {
 		loc = time.Local
 	}
+	r.report(Progress{Phase: PhaseRetention})
 	start := r.Clock.Now()
 	rep, err := r.Space.ApplyRetention(ctx, k, loc)
 	rec := state.Record{Kind: state.KindRetention, Forgotten: len(rep.Forgotten)}
@@ -275,6 +305,7 @@ func (r *Runner) runJob(ctx context.Context, st *state.State, history []state.Re
 	// the backup may have grown more than predicted, and a failed one may
 	// have left unused data.
 	if attempted && ctx.Err() == nil {
+		r.report(Progress{Phase: PhaseSpaceCheck, Job: job.Name})
 		start := r.Clock.Now()
 		rep, err := r.Space.Reclaim(ctx, 0)
 		r.recordReclaim(rep, start, err)
@@ -290,6 +321,12 @@ func (r *Runner) runJob(ctx context.Context, st *state.State, history []state.Re
 // full disk (DESIGN.md §3.9). attempted reports whether restic backup ran.
 func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.Record, jr *JobResult) (attempted bool, err error) {
 	bj := backend.Job{Name: job.Name, Paths: job.Paths, Exclude: job.Exclude, ExcludeFile: job.ExcludeFile, VSS: job.UseVSS()}
+	if r.Progress != nil {
+		bj.Progress = func(p backend.BackupProgress) {
+			r.report(Progress{Phase: PhaseBackup, Job: job.Name, Backup: &p})
+		}
+	}
+	r.report(Progress{Phase: PhasePrepare, Job: job.Name})
 
 	predicted, err := r.predict(ctx, bj, history)
 	if err != nil {
@@ -306,6 +343,7 @@ func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.
 		return false, fmt.Errorf("make room for the backup: %w", err)
 	}
 
+	r.report(Progress{Phase: PhaseBackup, Job: job.Name})
 	res, err := r.watchedBackup(ctx, bj)
 	if err != nil && ctx.Err() == nil {
 		full := errors.Is(err, errStalled)
@@ -320,6 +358,7 @@ func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.
 			if rerr != nil {
 				return true, fmt.Errorf("backup failed on a full disk: %w; recovery failed: %w", err, rerr)
 			}
+			r.report(Progress{Phase: PhaseBackup, Job: job.Name})
 			res, err = r.watchedBackup(ctx, bj)
 		}
 	}
@@ -414,6 +453,7 @@ func (r *Runner) maintenance(ctx context.Context, st *state.State, res *Result) 
 	now := r.Clock.Now()
 	changed := false
 	if MaintenanceDue(st.LastPrune, r.Config.Space.PruneInterval.Std(), now) {
+		r.report(Progress{Phase: PhasePrune})
 		rep, err := r.Space.RoutinePrune(ctx, RoutineMaxUnused)
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Errorf("routine prune: %w", err))
@@ -426,6 +466,7 @@ func (r *Runner) maintenance(ctx context.Context, st *state.State, res *Result) 
 	ic := r.Config.Integrity
 	readData := MaintenanceDue(st.LastReadDataCheck, ic.CheckReadDataInterval.Std(), now)
 	if ctx.Err() == nil && (readData || MaintenanceDue(st.LastCheck, ic.CheckInterval.Std(), now)) {
+		r.report(Progress{Phase: PhaseCheck})
 		start := r.Clock.Now()
 		var opts backend.CheckOptions
 		if readData {

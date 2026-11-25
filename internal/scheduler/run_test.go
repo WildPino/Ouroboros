@@ -53,6 +53,9 @@ func (w *world) Backup(ctx context.Context, job backend.Job) (backend.BackupResu
 	if err := ctx.Err(); err != nil {
 		return backend.BackupResult{}, err
 	}
+	if job.Progress != nil {
+		job.Progress(backend.BackupProgress{PercentDone: 0.5, BytesDone: 5 * MB, TotalBytes: 10 * MB})
+	}
 	if w.stuck > 0 {
 		w.stuck--
 		<-ctx.Done()
@@ -538,4 +541,25 @@ func TestRunCorruptStateIsWarning(t *testing.T) {
 	if _, err := state.Load(f.runner.StatePath); err != nil {
 		t.Fatalf("state not rewritten: %v", err)
 	}
+}
+
+func TestRunReportsProgress(t *testing.T) {
+	f := newFixture(t)
+	f.runner.Config.Jobs = f.runner.Config.Jobs[:1]
+	f.runner.Config.Retention.KeepDaily = 7
+	f.runner.Progress = func(p Progress) {
+		if p.Backup != nil {
+			f.w.log("progress %s %s %.1f", p.Phase, p.Job, p.Backup.PercentDone)
+			return
+		}
+		f.w.log("phase %s %s", p.Phase, p.Job)
+	}
+	f.run(Options{})
+	f.wantCalls(
+		"phase retention ", "retention",
+		"phase prepare docs", "estimate docs", "fits 100", "reclaim 100",
+		"phase backup docs", "backup docs", "progress backup docs 0.5",
+		"phase space_check docs", "reclaim 0",
+		"phase prune ", "prune 5%", "phase check ", "check 5%",
+	)
 }
