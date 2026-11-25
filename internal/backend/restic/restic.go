@@ -287,14 +287,36 @@ func (b *Restic) Restore(ctx context.Context, opts backend.RestoreOptions) error
 	if err := checkIDs(opts.SnapshotID); err != nil {
 		return err
 	}
-	args := []string{"restore", "--target", opts.Target}
+	args := []string{"restore", "--json", "--target", opts.Target}
 	for _, inc := range opts.Include {
-		args = append(args, "--include", inc)
+		// Case-insensitive, like the file systems the paths come from.
+		args = append(args, "--iinclude", includePattern(inc))
 	}
 	args = append(args, "--", opts.SnapshotID)
-	_, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Restore})
-	return err
+	out, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Restore})
+	if err != nil {
+		return err
+	}
+	// restic reports success when the patterns match nothing.
+	if len(opts.Include) > 0 && restoreTotalFiles(out.stdout) == 0 {
+		return fmt.Errorf("%w: %s", ErrNothingMatched, strings.Join(opts.Include, ", "))
+	}
+	return nil
 }
+
+// includePattern turns a Windows path into the form restic matches
+// snapshot paths against: C:\Users\me becomes /C/Users/me. Without this an
+// absolute Windows path matches nothing. Relative patterns only get forward
+// slashes.
+func includePattern(p string) string {
+	p = strings.ReplaceAll(p, `\`, "/")
+	if len(p) >= 2 && p[1] == ':' && isASCIILetter(p[0]) && (len(p) == 2 || p[2] == '/') {
+		p = "/" + strings.ToUpper(p[:1]) + p[2:]
+	}
+	return p
+}
+
+func isASCIILetter(c byte) bool { return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' }
 
 // Tag adds and removes tags. restic rewrites the snapshot, so its ID changes.
 func (b *Restic) Tag(ctx context.Context, id string, add, remove []string) error {

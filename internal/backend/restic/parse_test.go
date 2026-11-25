@@ -205,3 +205,15 @@ func TestNewValidatesOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestRestoreTotalFiles(t *testing.T) {
+	for file, want := range map[string]uint64{"restore.jsonl": 3, "restore-nothing.jsonl": 0} {
+		data, err := os.ReadFile(filepath.Join("testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := restoreTotalFiles(data); got != want {
+			t.Errorf("%s: %d files, want %d", file, got, want)
+		}
+	}
+}
