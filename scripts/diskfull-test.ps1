@@ -25,11 +25,15 @@ param(
     [int] $Iterations = 14,
     [int] $ChunkMB = 300,
     [switch] $Keep,
-    [string] $LogFile = (Join-Path (Split-Path $PSScriptRoot) 'test-results\diskfull-test.log')
+    [string] $LogFile
 )
 
 $ErrorActionPreference = 'Continue'
-$root = Split-Path $PSScriptRoot
+# Computed here: Windows PowerShell 5.1 may leave $PSScriptRoot empty while
+# it evaluates parameter defaults.
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $root
+if (-not $LogFile) { $LogFile = Join-Path $root 'test-results\diskfull-test.log' }
 $minFreeMB = 300
 
 Add-Type -Namespace Ouroboros -Name Disk -MemberDefinition @'

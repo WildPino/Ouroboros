@@ -10,11 +10,15 @@ such as Volume Shadow Copies. The output is saved to the log file.
 See docs/TESTING.md.
 #>
 param(
-    [string] $LogFile = (Join-Path (Split-Path $PSScriptRoot) 'test-results\admin-tests.log')
+    [string] $LogFile
 )
 
 $ErrorActionPreference = 'Continue'
-$root = Split-Path $PSScriptRoot
+# Computed here: Windows PowerShell 5.1 may leave $PSScriptRoot empty while
+# it evaluates parameter defaults.
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $root
+if (-not $LogFile) { $LogFile = Join-Path $root 'test-results\admin-tests.log' }
 New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
 Start-Transcript -Path $LogFile -Force | Out-Null
 $code = 1
