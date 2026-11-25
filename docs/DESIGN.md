@@ -20,13 +20,14 @@ implementation: if code and this document disagree, one of them is a bug.
 
 - A new archive or compression format. Storage is delegated to restic.
 - Cloud or remote repositories (planned later as mirroring).
-- A graphical interface (planned later as a tray app).
 - Linux and macOS support (the core is portable, platform code is not; planned later).
 
 ## 2. Architecture
 
-Single Go executable, `ouroboros.exe`, no runtime dependencies other than
-`restic.exe`.
+Two builds of the same Go code: `ouroboros.exe`, the command line, and
+`Ouroboros.exe`, the graphical interface and installer, which carries the
+command line build and `restic.exe` inside it (§12). No other runtime
+dependency: the interface uses WebView2, part of Windows 10 and 11.
 
 ```
 cmd/ouroboros/            CLI entry point (subcommands)
@@ -40,6 +41,8 @@ internal/lock/            single-instance lock (named mutex)
 internal/secret/          repository password storage (DPAPI)
 internal/platform/windows Task Scheduler, Event Log, disk APIs, privileges
 internal/logging/         structured logs, rotation
+internal/gui/             window, embedded web interface, bridge to the CLI
+internal/setup/           installation into Program Files, uninstallation
 ```
 
 ### 2.1 Backend interface
@@ -391,3 +394,163 @@ Invariants that must hold in every test:
 3. Deletion order is strictly oldest first among candidates.
 4. No restic command runs concurrently with another on the same repository.
 5. The repository passes `restic check` after any simulated interruption.
+
+## 12. Graphical interface and installer
+
+The goal is a program a non-technical user can download and use without a
+terminal, a text editor or a separate restic installation.
+
+Status: draft. The open questions in §12.8 are settled in ROADMAP phase M8.0,
+before any code for the window is written.
+
+### 12.1 What the user sees
+
+1. They download one file, `Ouroboros.exe`, and double-click it. Windows asks
+   for administrator rights (§12.3).
+2. The first time, a guided setup asks three things:
+   - where to store the backups: a list of drives with their free space, then
+     a folder on the chosen one (default `<drive>:\Ouroboros`); the system
+     drive is shown with a warning;
+   - what to back up: Documents, Desktop and Pictures of the user who opened
+     the program, preselected, plus any folder added with the Windows folder
+     picker;
+   - the repository password, twice, with the reminder to write it down.
+3. Setup installs the program (§12.4), writes the configuration, creates the
+   repository, installs the scheduled task and starts the first backup.
+4. Later, double-clicking `Ouroboros.exe` or the Start menu entry opens the
+   main window:
+   - per job: last result, next run, number of snapshots, a "Back up now"
+     button;
+   - the backup partition: used, free, the `min_free` margin, history depth;
+   - recent warnings and errors from the history;
+   - automatic backups on or paused.
+5. Jobs can be added, edited (folders, excludes, interval, VSS) and removed.
+   Advanced settings (space margins, retention, performance) sit on a separate
+   page with the defaults shown.
+6. Restore: choose a job and a snapshot by date, browse its folders, tick
+   files and folders, choose a target folder (default: a new folder on the
+   desktop) and restore. Restoring over the original location needs an extra
+   confirmation.
+7. Uninstall from the window or from Windows "Installed apps".
+
+The scheduled task keeps doing all the work; closing the window changes
+nothing. The command line stays available for scripts and advanced users.
+
+### 12.2 One download, two programs
+
+A Windows executable is either a console or a windowed program. A console
+program opens a terminal window when double-clicked; a windowed program
+cannot be used properly from a terminal (the shell does not wait for it and
+it cannot read a password from the console). Therefore:
+
+- `ouroboros.exe` is the command line, a console program, as today. The
+  scheduled task runs it.
+- `Ouroboros.exe` is a windowed program: the window, the setup and the
+  uninstaller. It embeds `ouroboros.exe` and `restic.exe` and writes them out
+  during setup. It never runs restic itself: every action that touches the
+  repository runs the installed `ouroboros.exe` with the same commands a user
+  would type, with `--json` output for the window to read. One code path,
+  already tested, does the work.
+
+The release publishes `Ouroboros.exe` (the download for users) and the zip of
+the command line alone, with SHA-256 checksums for both.
+
+restic is the official release binary of a pinned version, downloaded by the
+release workflow and checked against a SHA-256 recorded in the repository. Its
+BSD-2-Clause license is installed next to it. A development build embeds no
+restic and uses `restic_path` or `PATH` as today.
+
+### 12.3 Privileges
+
+`Ouroboros.exe` carries a manifest that requires administrator rights, so
+Windows asks once when the window opens, as for disk and backup tools. The
+password stays readable only by administrators and SYSTEM (§6). There is no
+service and no communication channel to secure.
+
+Because the window runs elevated, "the user who opened the program" (§12.1)
+is taken from the Explorer process of the session, not from the elevated
+token, so that Documents and Desktop are the right ones when another
+administrator account approved the prompt.
+
+### 12.4 Installation
+
+- Files: `C:\Program Files\Ouroboros\` holds `Ouroboros.exe`,
+  `ouroboros.exe`, `restic.exe` and the licenses. The folder keeps the
+  inherited Program Files permissions, writable only by administrators.
+- Configuration, password, state and logs: `C:\ProgramData\Ouroboros\`, as
+  today, with the folder restricted to SYSTEM and Administrators (§6).
+- The configuration sets `restic_path` to the installed `restic.exe`, so the
+  task never depends on `PATH`.
+- Start menu shortcut to `Ouroboros.exe`, and an entry in "Installed apps"
+  (registry `Uninstall` key) whose uninstall command is
+  `Ouroboros.exe uninstall`.
+- The installation folder is added to the machine `PATH`, so `ouroboros` works
+  in a new terminal.
+- Running a newer `Ouroboros.exe` updates the installed files and keeps the
+  configuration and the repository. An older one refuses.
+- Uninstall removes the task, the Event Log source, the files, the shortcut,
+  the `PATH` entry and the registry key. The configuration and the password
+  are removed only if the user ticks that option; the repository and its
+  backups are never removed by uninstall.
+
+### 12.5 Editing the configuration
+
+The window reads and writes `ouroboros.toml` through the `config` package,
+validating before saving; an invalid change is not saved. Saving rewrites the
+file in the format of `config init`, so comments written by hand are lost:
+the window says so before saving a file that it did not write itself.
+
+Removing a job leaves its snapshots in the repository. They are ordinary
+deletion candidates (§3.5), except the newest `keep_min_snapshots` of the job,
+which stay protected until the user deletes them. The window offers "Delete
+this job's backups": the space manager forgets them and prunes, after showing
+the list. This is an explicit request, so the protections for the newest and
+recent snapshots do not apply; pinned snapshots are kept unless unpinned
+first.
+
+Pausing automatic backups disables the scheduled task; resuming enables it.
+
+### 12.6 Technology
+
+- Window: WebView2 through `github.com/jchv/go-webview2` (pure Go, no cgo),
+  pinned to a commit. If the WebView2 runtime is missing, the program says so
+  and links to Microsoft's installer.
+- Interface: HTML, CSS and plain JavaScript embedded in the executable; no
+  build step, no framework, no network access. The page talks to Go only
+  through bound functions and loads nothing from outside the executable.
+- Folder pickers and confirmations use the native Windows dialogs.
+
+### 12.7 Testing
+
+- The bridge between the page and the command line is plain Go and tested
+  like the rest, with a fake command runner.
+- Setup and uninstall take their target folders and registry root as
+  parameters, so tests run them in temporary directories and a test registry
+  key.
+- The window itself, the UAC prompt and the real installation are checked by
+  hand, with a procedure in `docs/TESTING.md`.
+
+### 12.8 Open questions
+
+1. Distribution: an unsigned download triggers SmartScreen, and an
+   executable that embeds executables and asks for elevation may trigger
+   antivirus heuristics. Is code signing needed, or separate files?
+2. WebView2: where its user data folder goes for an elevated process (by
+   default it is created next to the executable, in Program Files); how
+   developer tools, the context menu, navigation and remote content are
+   disabled; what happens on systems without the runtime.
+3. Packaging: which tool embeds the manifest, icon and version information
+   (a new build-time dependency), and the size of the final download.
+4. Uninstall: how `Ouroboros.exe` removes itself, and how an update replaces
+   a running executable.
+5. The interactive user's known folders from an elevated process (§12.3).
+6. Interface language: English only, or English and Italian.
+7. The bridge contract: every call the page can make, with arguments,
+   results and errors.
+8. Progress and concurrency: how "Back up now" reports progress and behaves
+   when the scheduled task is already running.
+9. Deleting a removed job's snapshots (§12.5): the agent rules allow
+   deletions only through the planner with the §3.5 protections. Allowed as
+   an explicit exception, not offered, or limited to what the planner could
+   delete anyway.
+10. Wireframes of every screen, approved before the interface is built.

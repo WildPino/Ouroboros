@@ -91,6 +91,147 @@ behaviour changed.
 - [x] README reviewed against actual behaviour
 - [x] Tag `v0.1.0`
 
+## M8 — Graphical interface and installer (v0.2.0)
+
+The goal and the user experience are in DESIGN.md §12. M8 is split into
+phases done in order. Each phase starts by settling its open questions with
+the owner (recorded in DESIGN.md §12) and ends when its "done when" holds.
+No phase writes code for a later one.
+
+### M8.0 — Study and specification (no product code)
+
+Experiments live outside the repository; only their conclusions enter
+DESIGN.md §12.
+
+- [ ] Distribution risks: SmartScreen on an unsigned download, antivirus
+      reactions to an executable that embeds executables and asks for
+      elevation; options (code signing, separate files) and their cost
+- [ ] WebView2: runtime presence on Windows 10 and 11 (including LTSC), user
+      data folder for an elevated process, disabling developer tools,
+      context menu, navigation and remote content; behaviour when the
+      runtime is missing
+- [ ] Prototype window in a scratch module: one page, one bound function,
+      native folder picker, elevated launch; measure start time and size
+- [ ] Packaging: tool to embed the manifest, icon and version information
+      (new build-time dependency), size of the final download
+- [ ] Self-removal on uninstall and replacing a running executable on update
+- [ ] Identifying the interactive user's known folders from an elevated
+      process
+- [ ] Interface language (English only, or English and Italian)
+- [ ] Bridge contract: the list of calls the page can make, their arguments,
+      results and errors; nothing else is reachable from the page
+- [ ] Wireframes of every screen: setup steps, main window, job editor,
+      settings, restore, uninstall
+- [ ] Deleting a removed job's snapshots: allowed or not, and under which
+      protections (the agent rules allow deletions only through the planner
+      with the §3.5 protections)
+- [ ] Owner sign-off on DESIGN.md §12 before M8.1
+
+Done when: DESIGN.md §12 has no open question left and the owner approved it.
+
+### M8.1 — Command line for machines
+
+Everything the window needs exists first as a tested command, so the window
+adds no logic of its own.
+
+- [ ] Stable `--json` output for `status`, `snapshots`, `run`, `check`,
+      `restore`, `doctor`, with documented schemas and recorded fixtures
+- [ ] Progress events during `run` and `restore` (one JSON line per event)
+- [ ] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time
+- [ ] Configuration editing commands or a library API used by both the
+      window and tests: add, change and remove jobs and settings, validated
+      before writing
+- [ ] `pause` / `resume` of the scheduled task, shown by `status`
+- [ ] Deleting a removed job's snapshots, as decided in M8.0
+- [ ] `init` without a console prompt (password from the window), keeping
+      the rule that the password never appears in arguments or environment
+
+Done when: every action of DESIGN.md §12.1 can be done from the command line
+with `--json`, and the tests cover each command and schema.
+
+### M8.2 — Packaging
+
+- [ ] `Ouroboros.exe`: windowed build with administrator manifest, icon and
+      version information
+- [ ] Embedded `ouroboros.exe` and `restic.exe`; restic pinned by version and
+      SHA-256 in the repository, with its license
+- [ ] Release workflow publishes `Ouroboros.exe`, the command line zip and
+      checksums for both
+- [ ] Development build without embedded restic
+
+Done when: the release workflow produces `Ouroboros.exe`, and running it with
+a hidden diagnostic argument prints the versions of the embedded programs.
+
+### M8.3 — Install, update, uninstall (no window yet)
+
+- [ ] `internal/setup` with target folders and registry root as parameters
+- [ ] Install: Program Files files, ProgramData permissions, `restic_path`,
+      Start menu shortcut, "Installed apps" entry, machine `PATH`
+- [ ] Update over an older version; refusal over a newer one
+- [ ] Uninstall, including self-removal; configuration and password only on
+      request; never the repository
+- [ ] Tests in temporary folders and a test registry key
+- [ ] Manual procedure in `docs/TESTING.md`, run by the owner on a real
+      machine
+
+Done when: install, update and uninstall pass the tests and the owner's
+manual run leaves no trace after uninstall.
+
+### M8.4 — Window shell
+
+- [ ] WebView2 host with the M8.0 hardening, embedded assets only
+- [ ] Bridge implementing the M8.0 contract, calling `ouroboros.exe`; tested
+      with a fake command runner
+- [ ] Native folder picker, confirmation dialogs, missing-runtime message
+- [ ] Single window: opening it again focuses the existing one
+
+Done when: an empty window opens elevated, calls one command through the
+bridge and shows its result, and the bridge rejects anything outside the
+contract.
+
+### M8.5 — First setup
+
+- [ ] Three steps: backup drive and folder, folders to back up, password
+- [ ] Runs install (M8.3), writes the configuration, `init`, task, first
+      backup with progress
+
+Done when: on a clean machine, download → double-click → three answers →
+first backup finished, without a terminal (owner's manual run).
+
+### M8.6 — Main window
+
+- [ ] Jobs with last result, next run, snapshots; partition usage and margin;
+      recent warnings and errors
+- [ ] Back up now with progress; pause and resume; refresh while open
+
+Done when: the window shows the same facts as `status`, and the actions work
+while the scheduled task is also running.
+
+### M8.7 — Jobs and settings
+
+- [ ] Add, edit and remove jobs; advanced settings page
+- [ ] Warning before overwriting a hand-edited configuration
+- [ ] Deleting a removed job's snapshots, if allowed in M8.0
+
+Done when: every configuration change made in the window passes
+`config validate` and is used by the next run.
+
+### M8.8 — Restore
+
+- [ ] Pick job and snapshot by date, browse folders, select files and
+      folders, choose the target, restore with progress
+- [ ] Extra confirmation to restore over the original location
+
+Done when: files chosen in the window are restored identical, checked by a
+test and by the owner's manual run.
+
+### M8.9 — Release v0.2.0
+
+- [ ] README, `docs/RESTORE.md`, `docs/TESTING.md` and CHANGELOG for the
+      window
+- [ ] Full manual test by the owner on a machine without development tools
+- [ ] Tag `v0.2.0`
+
 ## Later
 
 - [ ] Notifications (Windows toast, e-mail, webhook)
