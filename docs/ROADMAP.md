@@ -120,7 +120,7 @@ DESIGN.md §12.
 - [x] Interface language (English only, or English and Italian)
 - [x] Bridge contract: the list of calls the page can make, their arguments,
       results and errors; nothing else is reachable from the page
-- [ ] Wireframes of every screen: setup steps, main window, job editor,
+- [x] Wireframes of every screen: setup steps, main window, job editor,
       settings, restore, uninstall
 - [x] Deleting a removed job's snapshots: allowed or not, and under which
       protections (the agent rules allow deletions only through the planner

@@ -727,4 +727,5 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      so. One repository action at a time is started from the window.
 9. Deleting a removed job's snapshots. Settled: allowed as the explicit
    exception described in §12.5.
-10. Wireframes of every screen, approved before the interface is built.
+10. Wireframes of every screen: in `docs/WIREFRAMES.md`, approved by the
+    owner before the interface is built.
