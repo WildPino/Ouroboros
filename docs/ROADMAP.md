@@ -118,7 +118,7 @@ DESIGN.md §12.
 - [x] Identifying the interactive user's known folders from an elevated
       process
 - [x] Interface language (English only, or English and Italian)
-- [ ] Bridge contract: the list of calls the page can make, their arguments,
+- [x] Bridge contract: the list of calls the page can make, their arguments,
       results and errors; nothing else is reachable from the page
 - [ ] Wireframes of every screen: setup steps, main window, job editor,
       settings, restore, uninstall
@@ -136,15 +136,21 @@ adds no logic of its own.
 
 - [ ] Stable `--json` output for `status`, `snapshots`, `run`, `check`,
       `restore`, `doctor`, with documented schemas and recorded fixtures
-- [ ] Progress events during `run` and `restore` (one JSON line per event)
+- [ ] Progress events during `restore` and `forget-job` (one JSON line per
+      event); `run` writes `progress.json` while it works (DESIGN §12.8,
+      question 8)
+- [ ] `status --json` reports whether the run lock is held, and can skip
+      the snapshot listing; `run --json` reports `locked` instead of
+      "nothing to do"
 - [ ] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time
-- [ ] Configuration editing commands or a library API used by both the
-      window and tests: add, change and remove jobs and settings, validated
-      before writing
+- [ ] Configuration editing library API in `config`, used by the window and
+      tests: add, change and remove jobs and settings, validated before
+      writing
 - [ ] `pause` / `resume` of the scheduled task, shown by `status`
-- [ ] Deleting a removed job's snapshots, as decided in M8.0
-- [ ] `init` without a console prompt (password from the window), keeping
-      the rule that the password never appears in arguments or environment
+- [ ] `forget-job NAME [--dry-run]`: deleting a removed job's snapshots
+      (DESIGN §12.5)
+- [ ] `init --password-stdin`, keeping the rule that the password never
+      appears in arguments or environment
 
 Done when: every action of DESIGN.md §12.1 can be done from the command line
 with `--json`, and the tests cover each command and schema.

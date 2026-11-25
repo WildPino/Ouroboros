@@ -660,10 +660,71 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 6. Interface language. Settled: English only in 0.2.0. Every string the
    page shows lives in one table, so a translation can be added later
    without touching the screens.
-7. The bridge contract: every call the page can make, with arguments,
-   results and errors.
-8. Progress and concurrency: how "Back up now" reports progress and behaves
-   when the scheduled task is already running.
+7. The bridge contract. Settled; it is the whole surface the page can reach
+   (§12.3).
+   - Mechanics: each call is a bound function returning a promise. Go runs
+     it on its own goroutine, never on the window's message loop, and
+     resolves the promise through `Dispatch`. Arguments are decoded into
+     fixed Go structs; unknown fields, wrong types or values outside the
+     allowed set reject the call with `invalid_argument` before anything
+     runs. Go sends events to the page with `PostWebMessageAsJson`.
+   - Every repository action runs the installed `ouroboros.exe` with fixed
+     arguments built by Go, never text from the page, and reads its `--json`
+     output. Configuration edits go through the `config` package in process
+     and are validated before writing (§12.5).
+   - The password crosses the bridge only in `setup.run`; Go passes it to
+     `ouroboros init --password-stdin` on standard input and keeps no copy.
+     It never appears in arguments, environment, logs or events.
+
+   | Call | Arguments | Result | Runs |
+   |---|---|---|---|
+   | `app.info` | none | version, installed version, setup needed | in process |
+   | `setup.drives` | none | letter, label, size, free, system, removable | in process |
+   | `setup.suggestedFolders` | none | name and path of profile folders (question 5) | in process |
+   | `dialog.pickFolder` | start folder or none | path, or empty if cancelled | native dialog |
+   | `setup.run` | repository folder, sources, password | done or error; events `setup` | install (§12.4), `config` package, `init`, `install` task, first `run` |
+   | `status.get` | `withSnapshots` | as `status --json` | `status --json` |
+   | `job.backupNow` | job name | started, or `locked` | `run --job NAME --force`, detached |
+   | `task.pause`, `task.resume` | none | done | `pause`, `resume` |
+   | `config.get` | none | settings, jobs, `handEdited` | in process |
+   | `config.saveJob` | job (new or changed) | saved, or field errors | in process |
+   | `config.removeJob` | job name | saved | in process |
+   | `config.saveSettings` | advanced settings | saved, or field errors | in process |
+   | `jobs.removed` | none | tags not in the configuration, snapshot count | `snapshots --json` |
+   | `jobs.deletePreview` | removed job name | snapshots to go, space back | `forget-job NAME --dry-run --json` |
+   | `jobs.delete` | removed job name, typed confirmation | done; events `delete` | `forget-job NAME --json` |
+   | `snapshots.list` | job name | id, time, size, pinned | `snapshots --job NAME --json` |
+   | `snapshots.ls` | snapshot id, folder | entries: name, type, size, time | `ls ID PATH --json` |
+   | `restore.run` | snapshot id, paths, target, `overOriginal` | files restored; events `restore` | `restore ... --json` |
+   | `restore.cancel` | none | done | stops the restore process |
+   | `app.uninstall` | `removeConfig` | done | uninstall (question 4) |
+
+   Errors are `{code, message}` with `code` one of `invalid_argument`,
+   `locked` (another process holds the run lock), `not_installed`,
+   `wrong_password`, `repository_unavailable`, `validation` (with field
+   errors), `cancelled`, `failed`. `message` is the command line's English
+   text. Names not in the table do not exist on the page.
+8. Progress and concurrency. Settled:
+   - `run` writes `progress.json` next to `state.json` while it works (job,
+     phase, files and bytes done and expected, start time), replacing it
+     atomically at most every 2 seconds and removing it at the end. The
+     window shows the progress of any run from this file, whether the
+     scheduled task or "Back up now" started it, so no channel between the
+     processes is needed.
+   - `status --json` reports whether the run lock is held. While it is,
+     "Back up now", job deletion and setup changes that need the lock are
+     disabled with "A backup is running"; configuration edits stay allowed
+     and apply to the next run.
+   - "Back up now" starts `ouroboros run` detached from the window, so
+     closing the window does not stop it. If the lock was taken in between,
+     the command reports `locked` and the window says so.
+   - While visible, the window refreshes `status --json` without snapshots
+     every 5 seconds and with snapshots when it opens, after each action it
+     started, and when a run ends.
+   - Restore and deletion are started by the window and report progress
+     through their own `--json` events. Only restore can be cancelled; a
+     cancelled restore leaves the files restored so far, and the window says
+     so. One repository action at a time is started from the window.
 9. Deleting a removed job's snapshots. Settled: allowed as the explicit
    exception described in §12.5.
 10. Wireframes of every screen, approved before the interface is built.
