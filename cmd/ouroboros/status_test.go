@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ func newStatusCase(t *testing.T) (*repoCase, statusDeps, time.Time) {
 		disk:       fakeDisk{total: 100 << 30, free: 40 << 30},
 		repoSize:   func(context.Context, string) (uint64, error) { return 55 << 30, nil },
 		taskExists: func(context.Context, string) (bool, error) { return true, nil },
+		lockHeld:   func() (bool, error) { return false, nil },
 		now:        func() time.Time { return now },
 	}
 	return c, d, now
@@ -39,7 +41,7 @@ func TestStatus(t *testing.T) {
 	}
 	state.Append(filepath.Join(c.dir, state.HistoryFile), state.Record{Kind: state.KindBackup, Job: "docs", OK: true, BytesAddedPacked: 100 << 20})
 
-	if err := runStatus(context.Background(), c.opts, d); err != nil {
+	if err := runStatus(context.Background(), c.opts, statusOptions{}, d); err != nil {
 		t.Fatalf("%v\n%s", err, c.errOut)
 	}
 	out := c.out.String()
@@ -68,7 +70,7 @@ func TestStatusWithoutElevationIsPartial(t *testing.T) {
 	d.repo.isElevated = func() (bool, error) { return false, nil }
 	d.taskExists = func(context.Context, string) (bool, error) { return false, nil }
 	d.repoSize = func(context.Context, string) (uint64, error) { return 0, errors.New("access denied") }
-	err := runStatus(context.Background(), c.opts, d)
+	err := runStatus(context.Background(), c.opts, statusOptions{}, d)
 	if exitCode(err) != exitWarnings {
 		t.Fatalf("got %v", err)
 	}
@@ -88,5 +90,88 @@ func TestShortDuration(t *testing.T) {
 		if got := shortDuration(d); got != want {
 			t.Errorf("shortDuration(%s) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// decodeJSONLines splits --json output into its lines and checks the
+// protocol: events first, then exactly one final line.
+func decodeJSONLines(t *testing.T, out string) []map[string]any {
+	t.Helper()
+	var lines []map[string]any
+	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("line %q: %v", l, err)
+		}
+		lines = append(lines, m)
+	}
+	for i, m := range lines {
+		final := m["type"] == "result" || m["type"] == "error"
+		if final != (i == len(lines)-1) {
+			t.Fatalf("line %d has type %v:\n%s", i, m["type"], out)
+		}
+	}
+	return lines
+}
+
+func TestStatusJSON(t *testing.T) {
+	c, d, now := newStatusCase(t)
+	st := state.State{Jobs: map[string]state.JobState{
+		"docs": {LastAttempt: now.Add(-time.Hour), LastSuccess: now.Add(-2 * time.Hour), LastError: "backup: source missing"},
+	}}
+	if err := state.Save(filepath.Join(c.dir, state.StateFile), st); err != nil {
+		t.Fatal(err)
+	}
+	hist := filepath.Join(c.dir, state.HistoryFile)
+	state.Append(hist, state.Record{Time: now.Add(-3 * time.Hour), Kind: state.KindBackup, Job: "docs", OK: true, Warnings: 2})
+	state.Append(hist, state.Record{Time: now.Add(-2 * time.Hour), Kind: state.KindBackup, Job: "docs", OK: true})
+	state.Append(hist, state.Record{Time: now.Add(-time.Hour), Kind: state.KindBackup, Job: "docs", Error: "source missing"})
+	d.lockHeld = func() (bool, error) { return true, nil }
+	c.opts.out = &jsonLines{w: c.out, command: "status"}
+
+	if err := runStatus(context.Background(), c.opts, statusOptions{}, d); err != nil {
+		t.Fatalf("%v\n%s", err, c.errOut)
+	}
+	lines := decodeJSONLines(t, c.out.String())
+	var got struct {
+		Data statusOut `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(c.out.String())), &got); err != nil {
+		t.Fatal(err)
+	}
+	s := got.Data
+	if lines[0]["command"] != "status" || s.Running == nil || !*s.Running {
+		t.Errorf("command %v running %v", lines[0]["command"], s.Running)
+	}
+	if s.Partition == nil || s.Partition.FreeBytes != 40<<30 || s.Partition.RequiredFreeBytes != 12<<30 {
+		t.Errorf("partition %+v", s.Partition)
+	}
+	if s.Snapshots == nil || s.Snapshots.Count != 2 || s.Task.Installed == nil || !*s.Task.Installed {
+		t.Errorf("snapshots %+v task %+v", s.Snapshots, s.Task)
+	}
+	if len(s.Jobs) != 1 || !s.Jobs[0].Failed || s.Jobs[0].LastError != "backup: source missing" ||
+		s.Jobs[0].Snapshots == nil || *s.Jobs[0].Snapshots != 2 || s.Maintenance.LastPrune != nil {
+		t.Errorf("jobs %+v maintenance %+v", s.Jobs, s.Maintenance)
+	}
+	if len(s.Recent) != 2 || s.Recent[0].Error != "source missing" || s.Recent[1].Warnings != 2 {
+		t.Errorf("recent problems %+v", s.Recent)
+	}
+}
+
+func TestStatusJSONWithoutSnapshots(t *testing.T) {
+	c, d, _ := newStatusCase(t)
+	d.repo.newBackend = nil // must not be reached
+	c.opts.out = &jsonLines{w: c.out, command: "status"}
+	if err := runStatus(context.Background(), c.opts, statusOptions{noSnapshots: true}, d); err != nil {
+		t.Fatalf("%v\n%s", err, c.errOut)
+	}
+	var got struct {
+		Data statusOut `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Data.Snapshots != nil || got.Data.Jobs[0].Snapshots != nil || len(got.Data.Problems) != 0 {
+		t.Errorf("%+v", got.Data)
 	}
 }

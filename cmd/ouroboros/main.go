@@ -49,7 +49,7 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	root := newRootCmd(stdout, stderr)
+	root, opts := newRootCmd(stdout, stderr)
 	root.SetArgs(args)
 	err := root.ExecuteContext(ctx)
 	if err == nil {
@@ -57,8 +57,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	code := exitCode(err)
 	var ce *codedError
-	if !errors.As(err, &ce) || ce.err != nil {
+	reported := errors.As(err, &ce) && ce.err == nil
+	if !reported {
 		fmt.Fprintln(stderr, "error:", err)
+	}
+	if opts.json {
+		// Errors from flag parsing or a refused --json come before the
+		// command could set up its output.
+		if opts.out == nil {
+			opts.out = &jsonLines{w: stdout, command: "ouroboros"}
+		}
+		opts.out.fail(err)
 	}
 	return code
 }

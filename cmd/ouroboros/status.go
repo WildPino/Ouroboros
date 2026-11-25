@@ -13,6 +13,7 @@ import (
 
 	"github.com/WildPino/ouroboros/internal/backend"
 	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/lock"
 	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/scheduler"
 	"github.com/WildPino/ouroboros/internal/space"
@@ -24,24 +25,34 @@ type statusDeps struct {
 	disk       diskUsager
 	repoSize   func(ctx context.Context, dir string) (uint64, error)
 	taskExists func(ctx context.Context, name string) (bool, error)
+	lockHeld   func() (bool, error)
 	now        func() time.Time
 }
 
+// statusOptions are the flags of status.
+type statusOptions struct {
+	noSnapshots bool
+}
+
 func newStatusCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	var sopts statusOptions
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show jobs, last results, space usage and history depth",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStatus(cmd.Context(), opts, statusDeps{
+			return runStatus(cmd.Context(), opts, sopts, statusDeps{
 				repo:       defaultRepoDeps(),
 				disk:       platformDisk{},
 				repoSize:   space.DirSize,
 				taskExists: windows.TaskExists,
+				lockHeld:   func() (bool, error) { return lock.Held(lock.Name) },
 				now:        time.Now,
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&sopts.noSnapshots, "no-snapshots", false, "skip listing snapshots, which reads the repository")
+	return supportsJSON(cmd)
 }
 
 // jobStatus is the status of one job.
@@ -71,16 +82,23 @@ type statusReport struct {
 	interval    time.Duration
 	st          state.State
 	jobs        []jobStatus
+	running     bool
+	runKnown    bool
+	recent      []state.Record
 	problems    []string
 }
 
-func runStatus(ctx context.Context, opts *options, d statusDeps) error {
+func runStatus(ctx context.Context, opts *options, sopts statusOptions, d statusDeps) error {
 	cfg, err := config.Load(opts.configPath)
 	if err != nil {
 		return err
 	}
-	rep := gatherStatus(ctx, opts, cfg, d)
-	writeStatus(opts.stdout, rep, d.now())
+	rep := gatherStatus(ctx, opts, sopts, cfg, d)
+	if opts.out != nil {
+		opts.out.result(statusJSON(rep))
+	} else {
+		writeStatus(opts.stdout, rep, d.now())
+	}
 	if len(rep.problems) > 0 {
 		for _, p := range rep.problems {
 			fmt.Fprintln(opts.stderr, "warning:", p)
@@ -90,7 +108,7 @@ func runStatus(ctx context.Context, opts *options, d statusDeps) error {
 	return nil
 }
 
-func gatherStatus(ctx context.Context, opts *options, cfg *config.Config, d statusDeps) statusReport {
+func gatherStatus(ctx context.Context, opts *options, sopts statusOptions, cfg *config.Config, d statusDeps) statusReport {
 	rep := statusReport{repoPath: cfg.Repository.Path, interval: cfg.Schedule.Tick.Std()}
 	problem := func(format string, a ...any) { rep.problems = append(rep.problems, fmt.Sprintf(format, a...)) }
 
@@ -116,6 +134,12 @@ func gatherStatus(ctx context.Context, opts *options, cfg *config.Config, d stat
 		rep.task = "not installed (run \"ouroboros install\")"
 	}
 
+	if held, err := d.lockHeld(); err != nil {
+		problem("cannot tell whether a run is in progress: %v", err)
+	} else {
+		rep.running, rep.runKnown = held, true
+	}
+
 	dir := filepath.Dir(opts.configPath)
 	st, err := state.Load(filepath.Join(dir, state.StateFile))
 	if err != nil {
@@ -126,10 +150,13 @@ func gatherStatus(ctx context.Context, opts *options, cfg *config.Config, d stat
 	if err != nil {
 		problem("cannot read the history: %v", err)
 	}
+	rep.recent = recentProblems(history, recentProblemsMax)
 
 	// Snapshots need the repository password, which only administrators
 	// can read.
-	if elevated, err := d.repo.isElevated(); err == nil && elevated {
+	if sopts.noSnapshots {
+		// Not a problem: the caller asked for the quick answer.
+	} else if elevated, err := d.repo.isElevated(); err == nil && elevated {
 		if s, err := openRepo(ctx, opts, d.repo, "status", false); err != nil {
 			problem("cannot open the repository: %v", err)
 		} else {
@@ -198,6 +225,9 @@ func writeStatus(w io.Writer, r statusReport, now time.Time) {
 		}
 	}
 	fmt.Fprintf(w, "Scheduled task:  %s, every %s\n", r.task, shortDuration(r.interval))
+	if r.running {
+		fmt.Fprintln(w, "Run:             in progress")
+	}
 	fmt.Fprintf(w, "Maintenance:     last prune %s, last check %s, last read-data check %s\n",
 		formatTime(r.st.LastPrune), formatTime(r.st.LastCheck), formatTime(r.st.LastReadDataCheck))
 
@@ -244,4 +274,20 @@ func shortDuration(d time.Duration) string {
 		s = strings.TrimSuffix(s, "0m")
 	}
 	return s
+}
+
+// recentProblemsMax bounds the failures and warnings status reports.
+const recentProblemsMax = 50
+
+// recentProblems returns the newest history records that failed or ended
+// with warnings, newest first.
+func recentProblems(history []state.Record, max int) []state.Record {
+	var out []state.Record
+	for i := len(history) - 1; i >= 0 && len(out) < max; i-- {
+		r := history[i]
+		if !r.OK || r.Warnings > 0 || r.Incomplete {
+			out = append(out, r)
+		}
+	}
+	return out
 }

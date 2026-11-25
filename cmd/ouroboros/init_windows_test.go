@@ -462,8 +462,9 @@ func TestRunEndToEnd(t *testing.T) {
 	}
 
 	out.Reset()
-	must("status", runStatus(ctx, opts, statusDeps{
+	must("status", runStatus(ctx, opts, statusOptions{}, statusDeps{
 		repo: deps, disk: platformDisk{}, repoSize: space.DirSize, now: time.Now,
+		lockHeld:   func() (bool, error) { return false, nil },
 		taskExists: func(context.Context, string) (bool, error) { return false, nil },
 	}))
 	for _, want := range []string{"History:         2 snapshots", "last check ", "docs "} {

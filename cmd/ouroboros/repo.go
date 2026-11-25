@@ -26,6 +26,21 @@ import (
 // while a run holds the lock.
 var errRunInProgress = errors.New("a backup run is in progress; try again when it has finished")
 
+// notElevatedError is returned when a command needs the repository password
+// but runs without administrator rights.
+type notElevatedError struct{ what string }
+
+func (e notElevatedError) Error() string {
+	return fmt.Sprintf("%s must be run as Administrator: the repository password is readable only by administrators", e.what)
+}
+
+func (e notElevatedError) Is(target error) bool {
+	_, ok := target.(notElevatedError)
+	return ok
+}
+
+var errNotElevated = notElevatedError{}
+
 // repoSession is an open repository for one command.
 type repoSession struct {
 	cfg     *config.Config
@@ -46,7 +61,7 @@ func openRepo(ctx context.Context, opts *options, d repoDeps, what string, exclu
 		return nil, fmt.Errorf("check privileges: %w", err)
 	}
 	if !elevated {
-		return nil, fmt.Errorf("%s must be run as Administrator: the repository password is readable only by administrators", what)
+		return nil, notElevatedError{what}
 	}
 	s := &repoSession{cfg: cfg, release: func() {}}
 	if exclusive {

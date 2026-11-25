@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/WildPino/ouroboros"
 	"github.com/WildPino/ouroboros/internal/backend/restic"
+	"github.com/WildPino/ouroboros/internal/config"
 	"github.com/WildPino/ouroboros/internal/platform/windows"
 )
 
@@ -289,6 +291,46 @@ func TestConfigErrorExitCode(t *testing.T) {
 			if code != exitConfig {
 				t.Errorf("%v with %s: code %d, want %d (stderr %q)", args, filepath.Base(cfg), code, exitConfig, errOut)
 			}
+		}
+	}
+}
+
+func TestJSONVersion(t *testing.T) {
+	code, out, _ := runCLI("version", "--json")
+	if code != exitOK || !strings.HasPrefix(out, `{"type":"result","command":"version",`) ||
+		!strings.HasSuffix(out, `"data":{"version":"dev"}}`+"\n") {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+}
+
+func TestJSONRefusedByUnsupportedCommand(t *testing.T) {
+	code, out, _ := runCLI("config", "init", "--json")
+	if code != exitError || !strings.Contains(out, `"type":"error"`) ||
+		!strings.Contains(out, `"code":"failed","message":"ouroboros config init does not support --json"`) {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+}
+
+func TestJSONErrorLine(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "none.toml")
+	code, out, _ := runCLI("status", "--json", "--config", cfg)
+	if code == exitOK || strings.Count(out, "\n") != 1 ||
+		!strings.Contains(out, `{"type":"error","command":"status",`) {
+		t.Fatalf("code=%d out=%q", code, out)
+	}
+}
+
+func TestErrorCodes(t *testing.T) {
+	for err, want := range map[error]string{
+		fmt.Errorf("load: %w", config.ErrInvalid): "config_invalid",
+		errRunInProgress: "locked",
+		fmt.Errorf("x: %w", restic.ErrWrongPassword): "wrong_password",
+		notElevatedError{"run"}:                      "not_elevated",
+		context.Canceled:                             "cancelled",
+		errors.New("other"):                          "failed",
+	} {
+		if got := errorCode(err); got != want {
+			t.Errorf("errorCode(%v) = %q, want %q", err, got, want)
 		}
 	}
 }

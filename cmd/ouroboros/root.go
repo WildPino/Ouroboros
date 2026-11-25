@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +18,11 @@ type options struct {
 	configPath string
 	stdout     io.Writer
 	stderr     io.Writer
+
+	// json selects the machine-readable output of docs/JSON.md; out is set
+	// before a command that supports it runs.
+	json bool
+	out  *jsonLines
 }
 
 func defaultConfigPath() string {
@@ -27,18 +33,29 @@ func defaultConfigPath() string {
 	return filepath.Join(base, "Ouroboros", "ouroboros.toml")
 }
 
-func newRootCmd(stdout, stderr io.Writer) *cobra.Command {
+func newRootCmd(stdout, stderr io.Writer) (*cobra.Command, *options) {
 	opts := &options{stdout: stdout, stderr: stderr}
 	root := &cobra.Command{
 		Use:           "ouroboros",
 		Short:         "Space-aware, set-and-forget versioned backups for Windows",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if !opts.json {
+				return nil
+			}
+			if cmd.Annotations[jsonAnnotation] == "" {
+				return fmt.Errorf("%s does not support --json", cmd.CommandPath())
+			}
+			opts.out = &jsonLines{w: opts.stdout, command: commandName(cmd)}
+			return nil
+		},
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringVar(&opts.configPath, "config", defaultConfigPath(), "path to the configuration file")
+	root.PersistentFlags().BoolVar(&opts.json, "json", false, "write machine-readable JSON Lines (see docs/JSON.md)")
 
 	root.AddCommand(
 		newVersionCmd(opts),
@@ -57,19 +74,29 @@ func newRootCmd(stdout, stderr io.Writer) *cobra.Command {
 		newReclaimCmd(opts),
 		newInternalCmd(opts),
 	)
-	return root
+	return root, opts
+}
+
+// commandName is the command path without the program name, such as
+// "status" or "config validate".
+func commandName(cmd *cobra.Command) string {
+	return strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" ")
 }
 
 func newVersionCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	return supportsJSON(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if opts.out != nil {
+				opts.out.result(map[string]string{"version": version})
+				return nil
+			}
 			_, err := fmt.Fprintln(opts.stdout, "ouroboros", version)
 			return err
 		},
-	}
+	})
 }
 
 func newConfigCmd(opts *options) *cobra.Command {
