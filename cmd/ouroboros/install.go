@@ -21,7 +21,8 @@ import (
 type taskScheduler interface {
 	Create(ctx context.Context, name string, def []byte) error
 	Delete(ctx context.Context, name string) error
-	Exists(ctx context.Context, name string) (bool, error)
+	State(ctx context.Context, name string) (windows.TaskState, error)
+	SetEnabled(ctx context.Context, name string, enabled bool) error
 }
 
 type systemTasks struct{}
@@ -34,8 +35,12 @@ func (systemTasks) Delete(ctx context.Context, name string) error {
 	return windows.DeleteTask(ctx, name)
 }
 
-func (systemTasks) Exists(ctx context.Context, name string) (bool, error) {
-	return windows.TaskExists(ctx, name)
+func (systemTasks) State(ctx context.Context, name string) (windows.TaskState, error) {
+	return windows.QueryTask(ctx, name)
+}
+
+func (systemTasks) SetEnabled(ctx context.Context, name string, enabled bool) error {
+	return windows.SetTaskEnabled(ctx, name, enabled)
 }
 
 type installDeps struct {
@@ -73,7 +78,7 @@ func newInstallCmd(opts *options) *cobra.Command {
 		Long: "Register the scheduled task " + windows.TaskName + ", which runs \"ouroboros run\" as\n" +
 			"SYSTEM every schedule.tick, catching up on runs missed while the computer was off,\n" +
 			"and registers the Event Log source " + logging.Source + " when logging.event_log is on.\n" +
-			"Running install again updates the task. Must be run as Administrator.",
+			"Running install again updates the task and keeps a pause. Must be run as Administrator.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstall(cmd.Context(), opts, defaultInstallDeps())
@@ -100,7 +105,7 @@ func requireElevation(d installDeps, what string) error {
 		return fmt.Errorf("check privileges: %w", err)
 	}
 	if !elevated {
-		return fmt.Errorf("%s must be run as Administrator", what)
+		return fmt.Errorf("%s must be run as Administrator: %w", what, errAdminRequired)
 	}
 	return nil
 }
@@ -159,6 +164,13 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 		}
 	}
 
+	// Reinstalling, for example after a change of schedule.tick, must not
+	// silently resume backups the user paused.
+	prev, err := d.tasks.State(ctx, windows.TaskName)
+	if err != nil {
+		return err
+	}
+	paused := prev == windows.TaskDisabled
 	def, err := windows.TaskXML(windows.TaskSpec{
 		Command:      exe,
 		Arguments:    `run --config "` + cfgPath + `"`,
@@ -166,6 +178,7 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 		RunOnBattery: cfg.Schedule.RunOnBattery,
 		Start:        d.now().Truncate(time.Minute),
 		Description:  "Runs due Ouroboros backups and maintenance.",
+		Paused:       paused,
 	})
 	if err != nil {
 		return err
@@ -175,6 +188,9 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 	}
 	fmt.Fprintf(opts.stdout, "Installed scheduled task %s: runs every %s as SYSTEM.\n", windows.TaskName, cfg.Schedule.Tick.Std())
 	fmt.Fprintf(opts.stdout, "  %s run --config \"%s\"\n", exe, cfgPath)
+	if paused {
+		fmt.Fprintln(opts.stdout, `The task stays paused, as it was; "ouroboros resume" restarts automatic backups.`)
+	}
 	if len(warnings) > 0 {
 		for _, w := range warnings {
 			fmt.Fprintln(opts.stderr, "warning:", w)
@@ -232,11 +248,11 @@ func runUninstall(ctx context.Context, opts *options, d installDeps) error {
 	if err := requireElevation(d, "uninstall"); err != nil {
 		return err
 	}
-	exists, err := d.tasks.Exists(ctx, windows.TaskName)
+	st, err := d.tasks.State(ctx, windows.TaskName)
 	if err != nil {
 		return err
 	}
-	if !exists {
+	if st == windows.TaskMissing {
 		fmt.Fprintf(opts.stdout, "Scheduled task %s is not installed.\n", windows.TaskName)
 		return nil
 	}

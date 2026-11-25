@@ -21,12 +21,12 @@ import (
 )
 
 type statusDeps struct {
-	repo       repoDeps
-	disk       diskUsager
-	repoSize   func(ctx context.Context, dir string) (uint64, error)
-	taskExists func(ctx context.Context, name string) (bool, error)
-	lockHeld   func() (bool, error)
-	now        func() time.Time
+	repo      repoDeps
+	disk      diskUsager
+	repoSize  func(ctx context.Context, dir string) (uint64, error)
+	taskState func(ctx context.Context, name string) (windows.TaskState, error)
+	lockHeld  func() (bool, error)
+	now       func() time.Time
 }
 
 // statusOptions are the flags of status.
@@ -42,12 +42,12 @@ func newStatusCmd(opts *options) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStatus(cmd.Context(), opts, sopts, statusDeps{
-				repo:       defaultRepoDeps(),
-				disk:       platformDisk{},
-				repoSize:   space.DirSize,
-				taskExists: windows.TaskExists,
-				lockHeld:   func() (bool, error) { return lock.Held(lock.Name) },
-				now:        time.Now,
+				repo:      defaultRepoDeps(),
+				disk:      platformDisk{},
+				repoSize:  space.DirSize,
+				taskState: windows.QueryTask,
+				lockHeld:  func() (bool, error) { return lock.Held(lock.Name) },
+				now:       time.Now,
 			})
 		},
 	}
@@ -78,7 +78,8 @@ type statusReport struct {
 	sizeKnown   bool
 	snapshots   []backend.Snapshot
 	snapsKnown  bool
-	task        string
+	task        windows.TaskState
+	taskKnown   bool
 	interval    time.Duration
 	st          state.State
 	jobs        []jobStatus
@@ -125,14 +126,11 @@ func gatherStatus(ctx context.Context, opts *options, sopts statusOptions, cfg *
 		rep.repoSize, rep.sizeKnown = size, true
 	}
 
-	switch ok, err := d.taskExists(ctx, windows.TaskName); {
+	switch st, err := d.taskState(ctx, windows.TaskName); {
 	case err != nil:
-		rep.task = "unknown"
 		problem("cannot query the scheduled task: %v", err)
-	case ok:
-		rep.task = "installed"
 	default:
-		rep.task = "not installed (run \"ouroboros install\")"
+		rep.task, rep.taskKnown = st, true
 	}
 
 	if held, err := d.lockHeld(); err != nil {
@@ -232,7 +230,18 @@ func writeStatus(w io.Writer, r statusReport, now time.Time) {
 			fmt.Fprintf(w, "History:         %d snapshots, oldest %s (%d days)\n", len(r.snapshots), formatTime(oldest), days)
 		}
 	}
-	fmt.Fprintf(w, "Scheduled task:  %s, every %s\n", r.task, shortDuration(r.interval))
+	task := "unknown"
+	if r.taskKnown {
+		switch r.task {
+		case windows.TaskEnabled:
+			task = "installed"
+		case windows.TaskDisabled:
+			task = `paused (run "ouroboros resume")`
+		default:
+			task = `not installed (run "ouroboros install")`
+		}
+	}
+	fmt.Fprintf(w, "Scheduled task:  %s, every %s\n", task, shortDuration(r.interval))
 	if r.running {
 		fmt.Fprintln(w, "Run:             in progress")
 	}

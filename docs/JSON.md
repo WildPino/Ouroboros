@@ -36,6 +36,7 @@ code `3`, and its data then lists the problems.
 | `config_invalid` | the configuration file is missing or invalid |
 | `locked` | another Ouroboros process holds the run lock |
 | `not_elevated` | the command needs administrator rights |
+| `task_not_installed` | `pause` or `resume` without the scheduled task |
 | `wrong_password` | the stored password does not open the repository |
 | `repository_unavailable` | the repository does not exist at its path |
 | `repository_locked` | restic found the repository locked |
@@ -79,7 +80,7 @@ Without administrator rights the snapshot fields are also `null` and
     "required_free_bytes": 12884901888
   },
   "snapshots": {"count": 2, "oldest": "2026-04-02T10:00:00Z"},
-  "task": {"installed": true, "tick": "15m"},
+  "task": {"installed": true, "paused": false, "tick": "15m"},
   "running": false,
   "progress": null,
   "maintenance": {"last_prune": "2026-04-29T10:00:00Z", "last_check": null, "last_read_data_check": null},
@@ -110,6 +111,7 @@ The example shows the `data` field of the result line.
 | `partition` | `null` if the partition could not be measured; `required_free_bytes` is `min_free` plus the prune headroom |
 | `snapshots` | all Ouroboros snapshots of this host; `oldest` is the history depth |
 | `task.installed` | `null` if the scheduled task could not be queried |
+| `task.paused` | automatic backups are paused with `pause`; `null` as above |
 | `running` | whether a run holds the lock now; `null` if unknown |
 | `progress` | while `running`, what the run is doing (see `run` below); otherwise `null` |
 | `jobs[].failed` | the last attempt came after the last success; `last_error` is then set |
@@ -236,6 +238,15 @@ scheduled one.
 - `errors` are failures outside the jobs: retention, prune, check.
 - The exit code follows the usual rules: `1` if anything failed, `4` if a job
   was skipped for lack of space, `3` with warnings.
+
+## pause, resume
+
+`pause --json` and `resume --json` end with the new state. Pausing a paused
+task, or resuming a running one, is not an error.
+
+```json
+{"paused": true}
+```
 
 ## ls
 

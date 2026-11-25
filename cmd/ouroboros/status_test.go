@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/WildPino/ouroboros/internal/backend"
+	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/state"
 )
 
@@ -21,12 +22,12 @@ func newStatusCase(t *testing.T) (*repoCase, statusDeps, time.Time) {
 		{ID: "bbbb2222", Time: now.AddDate(0, 0, -1), Tags: []string{backend.TagOuroboros, backend.JobTag("docs")}},
 	}
 	d := statusDeps{
-		repo:       c.deps,
-		disk:       fakeDisk{total: 100 << 30, free: 40 << 30},
-		repoSize:   func(context.Context, string) (uint64, error) { return 55 << 30, nil },
-		taskExists: func(context.Context, string) (bool, error) { return true, nil },
-		lockHeld:   func() (bool, error) { return false, nil },
-		now:        func() time.Time { return now },
+		repo:      c.deps,
+		disk:      fakeDisk{total: 100 << 30, free: 40 << 30},
+		repoSize:  func(context.Context, string) (uint64, error) { return 55 << 30, nil },
+		taskState: func(context.Context, string) (windows.TaskState, error) { return windows.TaskEnabled, nil },
+		lockHeld:  func() (bool, error) { return false, nil },
+		now:       func() time.Time { return now },
 	}
 	return c, d, now
 }
@@ -68,7 +69,7 @@ func TestStatus(t *testing.T) {
 func TestStatusWithoutElevationIsPartial(t *testing.T) {
 	c, d, _ := newStatusCase(t)
 	d.repo.isElevated = func() (bool, error) { return false, nil }
-	d.taskExists = func(context.Context, string) (bool, error) { return false, nil }
+	d.taskState = func(context.Context, string) (windows.TaskState, error) { return windows.TaskMissing, nil }
 	d.repoSize = func(context.Context, string) (uint64, error) { return 0, errors.New("access denied") }
 	err := runStatus(context.Background(), c.opts, statusOptions{}, d)
 	if exitCode(err) != exitWarnings {
@@ -176,5 +177,31 @@ func TestStatusJSONWithoutSnapshots(t *testing.T) {
 	// Not running: a leftover progress.json is ignored.
 	if got.Data.Snapshots != nil || got.Data.Jobs[0].Snapshots != nil || len(got.Data.Problems) != 0 || got.Data.Progress != nil {
 		t.Errorf("%+v", got.Data)
+	}
+}
+
+func TestStatusPaused(t *testing.T) {
+	c, d, _ := newStatusCase(t)
+	d.taskState = func(context.Context, string) (windows.TaskState, error) { return windows.TaskDisabled, nil }
+	if err := runStatus(context.Background(), c.opts, statusOptions{}, d); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.out.String(), `Scheduled task:  paused (run "ouroboros resume")`) {
+		t.Fatalf("%s", c.out)
+	}
+	c.out.Reset()
+	c.opts.out = &jsonLines{w: c.out, command: "status"}
+	if err := runStatus(context.Background(), c.opts, statusOptions{}, d); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Data statusOut `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	s := got.Data
+	if s.Task.Installed == nil || !*s.Task.Installed || s.Task.Paused == nil || !*s.Task.Paused {
+		t.Fatalf("task %+v", s.Task)
 	}
 }

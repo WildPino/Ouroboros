@@ -72,6 +72,8 @@ func newRootCmd(stdout, stderr io.Writer) (*cobra.Command, *options) {
 		newCheckCmd(opts),
 		newInstallCmd(opts),
 		newUninstallCmd(opts),
+		newPauseCmd(opts),
+		newResumeCmd(opts),
 		newReclaimCmd(opts),
 		newInternalCmd(opts),
 	)

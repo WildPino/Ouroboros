@@ -146,7 +146,7 @@ adds no logic of its own.
 - [x] Configuration editing library API in `config`, used by the window and
       tests: add, change and remove jobs and settings, validated before
       writing
-- [ ] `pause` / `resume` of the scheduled task, shown by `status`
+- [x] `pause` / `resume` of the scheduled task, shown by `status`
 - [ ] `forget-job NAME [--dry-run]`: deleting a removed job's snapshots
       (DESIGN §12.5)
 - [ ] `init --password-stdin`, keeping the rule that the password never

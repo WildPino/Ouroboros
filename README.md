@@ -159,6 +159,7 @@ vss = true
 | `ouroboros pin SNAPSHOT` / `unpin` | Protect a snapshot from automatic deletion |
 | `ouroboros check [--read-data PERCENT]` | Verify repository integrity |
 | `ouroboros install` / `uninstall` | Register or remove the scheduled task |
+| `ouroboros pause` / `resume` | Stop and restart automatic backups, keeping the task |
 | `ouroboros doctor` | Check restic version, permissions, VSS, config, free space |
 | `ouroboros config init` / `validate` | Print an example config / validate the current one |
 
@@ -168,8 +169,8 @@ scheduled task need the rights too. Without them, `status` shows only what it
 can read. `pin`, `unpin` and `check` refuse to run while a backup is in
 progress.
 
-`status`, `snapshots`, `ls`, `run`, `restore`, `check`, `doctor` and `version`
-accept `--json` for machine-readable output, described in
+`status`, `snapshots`, `ls`, `run`, `restore`, `check`, `doctor`, `pause`,
+`resume` and `version` accept `--json` for machine-readable output, described in
 [docs/JSON.md](docs/JSON.md).
 
 `--config PATH` selects another configuration; the default is

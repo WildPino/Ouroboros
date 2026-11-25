@@ -107,8 +107,10 @@ func errorCode(err error) string {
 		return "cannot_reclaim"
 	case errors.Is(err, errCheckFailed):
 		return "check_failed"
-	case errors.Is(err, errNotElevated):
+	case errors.Is(err, errNotElevated), errors.Is(err, errAdminRequired):
 		return "not_elevated"
+	case errors.Is(err, errTaskNotInstalled):
+		return "task_not_installed"
 	case errors.Is(err, context.Canceled):
 		return "cancelled"
 	default:

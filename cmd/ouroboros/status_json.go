@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/state"
 )
 
@@ -42,8 +43,11 @@ type snapshotsOut struct {
 
 type taskOut struct {
 	// Installed is null when the scheduled task could not be queried.
-	Installed *bool  `json:"installed"`
-	Tick      string `json:"tick"`
+	Installed *bool `json:"installed"`
+	// Paused is true when the task is installed but disabled with "pause";
+	// null when the task could not be queried.
+	Paused *bool  `json:"paused"`
+	Tick   string `json:"tick"`
 }
 
 type maintenanceOut struct {
@@ -105,12 +109,9 @@ func statusJSON(r statusReport) statusOut {
 			out.Snapshots.Oldest = timeOrNil(r.snapshots[0].Time)
 		}
 	}
-	switch r.task {
-	case "installed":
-		out.Task.Installed = ptr(true)
-	case "unknown":
-	default:
-		out.Task.Installed = ptr(false)
+	if r.taskKnown {
+		out.Task.Installed = ptr(r.task != windows.TaskMissing)
+		out.Task.Paused = ptr(r.task == windows.TaskDisabled)
 	}
 	if r.runKnown {
 		out.Running = ptr(r.running)

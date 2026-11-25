@@ -16,9 +16,10 @@ import (
 )
 
 type fakeTasks struct {
-	created map[string][]byte
-	deleted []string
-	err     error
+	created  map[string][]byte
+	disabled map[string]bool
+	deleted  []string
+	err      error
 }
 
 func (f *fakeTasks) Create(_ context.Context, name string, def []byte) error {
@@ -29,6 +30,11 @@ func (f *fakeTasks) Create(_ context.Context, name string, def []byte) error {
 		f.created = map[string][]byte{}
 	}
 	f.created[name] = def
+	if f.disabled == nil {
+		f.disabled = map[string]bool{}
+	}
+	// The trigger is always enabled, so a false Enabled is the task's own.
+	f.disabled[name] = strings.Contains(utf16Text(def), "<Enabled>false</Enabled>")
 	return nil
 }
 
@@ -38,15 +44,40 @@ func (f *fakeTasks) Delete(_ context.Context, name string) error {
 	return nil
 }
 
-func (f *fakeTasks) Exists(_ context.Context, name string) (bool, error) {
-	_, ok := f.created[name]
-	return ok, nil
+func (f *fakeTasks) State(_ context.Context, name string) (windows.TaskState, error) {
+	switch _, ok := f.created[name]; {
+	case !ok:
+		return windows.TaskMissing, nil
+	case f.disabled[name]:
+		return windows.TaskDisabled, nil
+	default:
+		return windows.TaskEnabled, nil
+	}
+}
+
+func (f *fakeTasks) SetEnabled(_ context.Context, name string, enabled bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	if _, ok := f.created[name]; !ok {
+		return errors.New("no such task")
+	}
+	f.disabled[name] = !enabled
+	return nil
 }
 
 func decodeUTF16(t *testing.T, b []byte) string {
 	t.Helper()
 	if len(b) < 2 || b[0] != 0xFF || b[1] != 0xFE {
 		t.Fatal("not UTF-16LE")
+	}
+	return utf16Text(b)
+}
+
+// utf16Text decodes UTF-16LE with a byte order mark.
+func utf16Text(b []byte) string {
+	if len(b) < 2 {
+		return ""
 	}
 	u := make([]uint16, (len(b)-2)/2)
 	for i := range u {

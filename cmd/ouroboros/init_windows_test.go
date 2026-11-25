@@ -22,6 +22,7 @@ import (
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
 	"github.com/WildPino/ouroboros/internal/lock"
+	platform "github.com/WildPino/ouroboros/internal/platform/windows"
 	"github.com/WildPino/ouroboros/internal/scheduler"
 	"github.com/WildPino/ouroboros/internal/secret"
 	"github.com/WildPino/ouroboros/internal/space"
@@ -489,8 +490,8 @@ func TestRunEndToEnd(t *testing.T) {
 	out.Reset()
 	must("status", runStatus(ctx, opts, statusOptions{}, statusDeps{
 		repo: deps, disk: platformDisk{}, repoSize: space.DirSize, now: time.Now,
-		lockHeld:   func() (bool, error) { return false, nil },
-		taskExists: func(context.Context, string) (bool, error) { return false, nil },
+		lockHeld:  func() (bool, error) { return false, nil },
+		taskState: func(context.Context, string) (platform.TaskState, error) { return platform.TaskMissing, nil },
 	}))
 	for _, want := range []string{"History:         3 snapshots", "last check ", "docs "} {
 		if !strings.Contains(out.String(), want) {

@@ -41,6 +41,10 @@ func (e notElevatedError) Is(target error) bool {
 
 var errNotElevated = notElevatedError{}
 
+// errAdminRequired marks commands that change the system and need
+// administrator rights for that, not for the password.
+var errAdminRequired = errors.New("it changes the scheduled task")
+
 // errCheckFailed wraps the error of a check that found problems.
 var errCheckFailed = errors.New("repository check failed")
 
