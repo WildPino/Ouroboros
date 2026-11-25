@@ -181,10 +181,10 @@ func (b *Restic) backupArgs(job backend.Job, dryRun bool) ([]string, error) {
 		args = append(args, "--use-fs-snapshot")
 	}
 	for _, ex := range job.Exclude {
-		args = append(args, "--exclude", ex)
+		args = append(args, "--iexclude", ex)
 	}
 	if job.ExcludeFile != "" {
-		args = append(args, "--exclude-file", job.ExcludeFile)
+		args = append(args, "--iexclude-file", job.ExcludeFile)
 	}
 	if b.opts.ReadConcurrency > 0 {
 		args = append(args, "--read-concurrency", strconv.Itoa(b.opts.ReadConcurrency))

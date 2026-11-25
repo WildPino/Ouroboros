@@ -76,8 +76,8 @@ i.e. actual growth on disk).
 - Repository created with format version 2 (compression support).
 - Backup flags: `--compression <config>`, `--use-fs-snapshot` when `vss = true`,
   `--tag ouroboros --tag job:<name>`, `--host <hostname>`,
-  `--exclude` / `--exclude-file`, `--read-concurrency` and `--pack-size` from
-  the memory profile.
+  `--iexclude` / `--iexclude-file` (case-insensitive, like Windows paths),
+  `--read-concurrency` and `--pack-size` from the memory profile.
 - Snapshots are attributed to jobs exclusively through the `job:<name>` tag.
 - Pinned snapshots carry the tag `ouroboros:pinned`.
 - Never use `--no-lock`. Never touch files inside the repository directly.
