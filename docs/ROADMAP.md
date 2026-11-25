@@ -89,7 +89,7 @@ behaviour changed.
 - [x] Release workflow: tagged builds, zip with `ouroboros.exe`, example config,
       SHA-256 checksums
 - [x] README reviewed against actual behaviour
-- [ ] Tag `v0.1.0`
+- [x] Tag `v0.1.0`
 
 ## Later
 
