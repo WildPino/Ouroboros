@@ -143,7 +143,7 @@ adds no logic of its own.
       the snapshot listing; `run --json` reports `locked` instead of
       "nothing to do"
 - [x] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time
-- [ ] Configuration editing library API in `config`, used by the window and
+- [x] Configuration editing library API in `config`, used by the window and
       tests: add, change and remove jobs and settings, validated before
       writing
 - [ ] `pause` / `resume` of the scheduled task, shown by `status`
