@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -388,6 +389,30 @@ func TestRunEndToEnd(t *testing.T) {
 		t.Fatalf("forced run:\n%s", out)
 	}
 
+	// The same with --json: phase events, then the result; progress.json
+	// exists only while the run works.
+	var jout, jerr bytes.Buffer
+	jopts := &options{configPath: c.cfgPath, stdout: &jout, stderr: &jerr, json: true}
+	jopts.out = &jsonLines{w: &jout, command: "run"}
+	if err := runRun(context.Background(), jopts, scheduler.Options{Job: "docs", Force: true}, deps); err != nil {
+		t.Fatalf("json run: %v\n%s", err, &jerr)
+	}
+	lines := decodeJSONLines(t, jout.String())
+	phases := []string{}
+	for _, l := range lines[:len(lines)-1] {
+		phases = append(phases, l["data"].(map[string]any)["phase"].(string))
+	}
+	if !slices.Contains(phases, scheduler.PhasePrepare) || !slices.Contains(phases, scheduler.PhaseBackup) {
+		t.Fatalf("phases %v\n%s", phases, &jout)
+	}
+	res := lines[len(lines)-1]["data"].(map[string]any)
+	if job := res["jobs"].([]any)[0].(map[string]any); job["ok"] != true || job["snapshot_id"] == "" {
+		t.Fatalf("result %v", res)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(c.cfgPath), state.ProgressFile)); !os.IsNotExist(err) {
+		t.Fatalf("progress.json left behind: %v", err)
+	}
+
 	cfg, err := config.Load(c.cfgPath)
 	if err != nil {
 		t.Fatal(err)
@@ -397,7 +422,7 @@ func TestRunEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	snaps, err := b.Snapshots(context.Background(), backend.SnapshotFilter{Tags: []string{backend.JobTag("docs")}})
-	if err != nil || len(snaps) != 2 {
+	if err != nil || len(snaps) != 3 {
 		t.Fatalf("snapshots: %v, %v", snaps, err)
 	}
 	recs, _, err := state.ReadHistory(filepath.Join(c.dir, state.HistoryFile))
@@ -411,7 +436,7 @@ func TestRunEndToEnd(t *testing.T) {
 		}
 		kinds[r.Kind]++
 	}
-	if kinds[state.KindBackup] != 2 || kinds[state.KindPrune] != 1 || kinds[state.KindCheck] != 1 {
+	if kinds[state.KindBackup] != 3 || kinds[state.KindPrune] != 1 || kinds[state.KindCheck] != 1 {
 		t.Fatalf("history kinds %v", kinds)
 	}
 
@@ -426,7 +451,7 @@ func TestRunEndToEnd(t *testing.T) {
 		}
 	}
 	must("snapshots", runSnapshots(ctx, opts, deps, "docs"))
-	if !strings.Contains(out.String(), "2 snapshots") {
+	if !strings.Contains(out.String(), "3 snapshots") {
 		t.Fatalf("snapshots:\n%s", &out)
 	}
 	oldest := snaps[0]
@@ -467,7 +492,7 @@ func TestRunEndToEnd(t *testing.T) {
 		lockHeld:   func() (bool, error) { return false, nil },
 		taskExists: func(context.Context, string) (bool, error) { return false, nil },
 	}))
-	for _, want := range []string{"History:         2 snapshots", "last check ", "docs "} {
+	for _, want := range []string{"History:         3 snapshots", "last check ", "docs "} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("status lacks %q:\n%s", want, &out)
 		}

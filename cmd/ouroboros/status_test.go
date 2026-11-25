@@ -127,6 +127,7 @@ func TestStatusJSON(t *testing.T) {
 	state.Append(hist, state.Record{Time: now.Add(-2 * time.Hour), Kind: state.KindBackup, Job: "docs", OK: true})
 	state.Append(hist, state.Record{Time: now.Add(-time.Hour), Kind: state.KindBackup, Job: "docs", Error: "source missing"})
 	d.lockHeld = func() (bool, error) { return true, nil }
+	state.SaveProgress(filepath.Join(c.dir, state.ProgressFile), state.Progress{Phase: "backup", Job: "docs"})
 	c.opts.out = &jsonLines{w: c.out, command: "status"}
 
 	if err := runStatus(context.Background(), c.opts, statusOptions{}, d); err != nil {
@@ -140,7 +141,7 @@ func TestStatusJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := got.Data
-	if lines[0]["command"] != "status" || s.Running == nil || !*s.Running {
+	if lines[0]["command"] != "status" || s.Running == nil || !*s.Running || s.Progress == nil || s.Progress.Job != "docs" {
 		t.Errorf("command %v running %v", lines[0]["command"], s.Running)
 	}
 	if s.Partition == nil || s.Partition.FreeBytes != 40<<30 || s.Partition.RequiredFreeBytes != 12<<30 {
@@ -161,6 +162,7 @@ func TestStatusJSON(t *testing.T) {
 func TestStatusJSONWithoutSnapshots(t *testing.T) {
 	c, d, _ := newStatusCase(t)
 	d.repo.newBackend = nil // must not be reached
+	state.SaveProgress(filepath.Join(c.dir, state.ProgressFile), state.Progress{Phase: "backup"})
 	c.opts.out = &jsonLines{w: c.out, command: "status"}
 	if err := runStatus(context.Background(), c.opts, statusOptions{noSnapshots: true}, d); err != nil {
 		t.Fatalf("%v\n%s", err, c.errOut)
@@ -171,7 +173,8 @@ func TestStatusJSONWithoutSnapshots(t *testing.T) {
 	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Data.Snapshots != nil || got.Data.Jobs[0].Snapshots != nil || len(got.Data.Problems) != 0 {
+	// Not running: a leftover progress.json is ignored.
+	if got.Data.Snapshots != nil || got.Data.Jobs[0].Snapshots != nil || len(got.Data.Problems) != 0 || got.Data.Progress != nil {
 		t.Errorf("%+v", got.Data)
 	}
 }

@@ -84,6 +84,7 @@ type statusReport struct {
 	jobs        []jobStatus
 	running     bool
 	runKnown    bool
+	progress    *state.Progress
 	recent      []state.Record
 	problems    []string
 }
@@ -151,6 +152,13 @@ func gatherStatus(ctx context.Context, opts *options, sopts statusOptions, cfg *
 		problem("cannot read the history: %v", err)
 	}
 	rep.recent = recentProblems(history, recentProblemsMax)
+	// A run that died leaves progress.json behind: only trust it while the
+	// lock is held.
+	if rep.running {
+		if p, ok, err := state.LoadProgress(filepath.Join(dir, state.ProgressFile)); err == nil && ok {
+			rep.progress = &p
+		}
+	}
 
 	// Snapshots need the repository password, which only administrators
 	// can read.

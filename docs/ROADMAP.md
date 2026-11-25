@@ -139,7 +139,7 @@ adds no logic of its own.
 - [ ] Progress events during `restore` and `forget-job` (one JSON line per
       event); `run` writes `progress.json` while it works (DESIGN §12.8,
       question 8)
-- [ ] `status --json` reports whether the run lock is held, and can skip
+- [x] `status --json` reports whether the run lock is held, and can skip
       the snapshot listing; `run --json` reports `locked` instead of
       "nothing to do"
 - [ ] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time

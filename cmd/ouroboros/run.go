@@ -66,12 +66,18 @@ func newRunCmd(opts *options) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&ropts.Job, "job", "", "run only the job with this name")
 	cmd.Flags().BoolVar(&ropts.Force, "force", false, "run even if not due")
-	return cmd
+	return supportsJSON(cmd)
 }
 
 func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d repoDeps) error {
 	sess, err := openRepo(ctx, opts, d, "run", true)
 	if errors.Is(err, lock.ErrLocked) {
+		// Not an error: the scheduled task finds the lock taken whenever a
+		// run lasts longer than a tick.
+		if opts.out != nil {
+			opts.out.result(runOut{Locked: true, Jobs: []runJobOut{}, Errors: []string{}, Warnings: []string{}})
+			return nil
+		}
 		fmt.Fprintln(opts.stdout, "Another ouroboros process is running; nothing to do.")
 		return nil
 	}
@@ -100,8 +106,17 @@ func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d repoD
 		Clock:       space.SystemClock{},
 		Log:         log,
 	}
+	progress := newProgressReporter(filepath.Join(dir, state.ProgressFile), opts.out, opts.stderr, time.Now)
+	runner.Progress = progress.report
 	res, err := runner.Run(ctx, ropts)
-	writeRunResult(opts.stdout, res, ropts)
+	progress.finish()
+	if opts.out != nil {
+		if err == nil {
+			opts.out.result(runJSON(res))
+		}
+	} else {
+		writeRunResult(opts.stdout, res, ropts)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return errors.New("interrupted")
@@ -174,4 +189,49 @@ func checkResticVersion(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("restic %s is too old: %s or later is required", v, restic.MinVersion)
 	}
 	return nil
+}
+
+// Schema of "run --json"; documented in docs/JSON.md.
+type runOut struct {
+	// Locked is true when another process held the run lock and nothing
+	// was done.
+	Locked   bool        `json:"locked"`
+	Jobs     []runJobOut `json:"jobs"`
+	Errors   []string    `json:"errors"`
+	Warnings []string    `json:"warnings"`
+}
+
+type runJobOut struct {
+	Job             string   `json:"job"`
+	OK              bool     `json:"ok"`
+	Error           string   `json:"error,omitempty"`
+	ErrorCode       string   `json:"error_code,omitempty"`
+	SnapshotID      string   `json:"snapshot_id,omitempty"`
+	PredictedBytes  uint64   `json:"predicted_bytes"`
+	AddedBytes      uint64   `json:"added_bytes"`
+	ProcessedBytes  uint64   `json:"processed_bytes"`
+	FilesNew        uint64   `json:"files_new"`
+	FilesChanged    uint64   `json:"files_changed"`
+	DurationSeconds float64  `json:"duration_seconds"`
+	Warnings        []string `json:"warnings"`
+}
+
+func runJSON(res scheduler.Result) runOut {
+	out := runOut{Jobs: []runJobOut{}, Errors: []string{}, Warnings: append([]string{}, res.Warnings...)}
+	for _, j := range res.Jobs {
+		jo := runJobOut{Job: j.Job, OK: j.Err == nil, PredictedBytes: j.Predicted, Warnings: append([]string{}, j.Warnings...)}
+		if j.Err != nil {
+			jo.Error, jo.ErrorCode = j.Err.Error(), errorCode(j.Err)
+		} else {
+			b := j.Backup
+			jo.SnapshotID, jo.AddedBytes, jo.ProcessedBytes = b.SnapshotID, b.BytesAddedPacked, b.BytesProcessed
+			jo.FilesNew, jo.FilesChanged = b.FilesNew, b.FilesChanged
+			jo.DurationSeconds = b.End.Sub(b.Start).Seconds()
+		}
+		out.Jobs = append(out.Jobs, jo)
+	}
+	for _, e := range res.Errors {
+		out.Errors = append(out.Errors, e.Error())
+	}
+	return out
 }

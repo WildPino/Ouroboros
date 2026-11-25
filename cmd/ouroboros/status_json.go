@@ -9,15 +9,16 @@ import (
 // Schema of "status --json"; documented in docs/JSON.md. Pointers and
 // omitted fields mean the value is unknown, never zero.
 type statusOut struct {
-	Repository  repositoryOut  `json:"repository"`
-	Partition   *partitionOut  `json:"partition"`
-	Snapshots   *snapshotsOut  `json:"snapshots"`
-	Task        taskOut        `json:"task"`
-	Running     *bool          `json:"running"`
-	Maintenance maintenanceOut `json:"maintenance"`
-	Jobs        []jobOut       `json:"jobs"`
-	Recent      []recordOut    `json:"recent_problems"`
-	Problems    []string       `json:"problems"`
+	Repository  repositoryOut   `json:"repository"`
+	Partition   *partitionOut   `json:"partition"`
+	Snapshots   *snapshotsOut   `json:"snapshots"`
+	Task        taskOut         `json:"task"`
+	Running     *bool           `json:"running"`
+	Progress    *state.Progress `json:"progress"`
+	Maintenance maintenanceOut  `json:"maintenance"`
+	Jobs        []jobOut        `json:"jobs"`
+	Recent      []recordOut     `json:"recent_problems"`
+	Problems    []string        `json:"problems"`
 }
 
 type repositoryOut struct {
@@ -114,6 +115,7 @@ func statusJSON(r statusReport) statusOut {
 	if r.runKnown {
 		out.Running = ptr(r.running)
 	}
+	out.Progress = r.progress
 	for _, j := range r.jobs {
 		jo := jobOut{
 			Name:        j.name,

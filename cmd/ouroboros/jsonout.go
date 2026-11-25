@@ -70,6 +70,11 @@ func (j *jsonLines) write(l jsonLine) {
 	j.w.Write(append(b, '\n'))
 }
 
+// event reports progress; it is ignored after the final line.
+func (j *jsonLines) event(name string, data any) {
+	j.write(jsonLine{Type: "event", Event: name, Data: data})
+}
+
 func (j *jsonLines) result(data any) { j.write(jsonLine{Type: "result", Data: data}) }
 
 func (j *jsonLines) fail(err error) {
