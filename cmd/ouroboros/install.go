@@ -42,6 +42,7 @@ type installDeps struct {
 	isElevated       func() (bool, error)
 	executable       func() (string, error)
 	findRestic       func(configured string) (string, error)
+	systemPath       func() (string, error)
 	untrustedWriters func(path string) ([]string, error)
 	tasks            taskScheduler
 	now              func() time.Time
@@ -55,6 +56,7 @@ func defaultInstallDeps() installDeps {
 		isElevated:       windows.IsElevated,
 		executable:       os.Executable,
 		findRestic:       restic.FindExecutable,
+		systemPath:       windows.SystemPath,
 		untrustedWriters: windows.UntrustedWriters,
 		tasks:            systemTasks{},
 		now:              time.Now,
@@ -136,6 +138,11 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Repository.ResticPath == "" {
+		if resticExe, err = resticForSystem(d.systemPath, resticExe, cfgPath); err != nil {
+			return err
+		}
+	}
 
 	warnings := installWarnings(d, exe, resticExe, cfgPath)
 	if cfg.Logging.EventLog {
@@ -167,6 +174,25 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 		return &codedError{code: exitWarnings}
 	}
 	return nil
+}
+
+// resticForSystem returns the restic that the scheduled task will run when
+// restic_path is empty. The task runs as SYSTEM, which searches only the
+// machine PATH: restic installed for one user, as winget does by default,
+// is found from that user's console but not by the task, which would then
+// fail on every tick.
+func resticForSystem(systemPath func() (string, error), found, cfgPath string) (string, error) {
+	sp, err := systemPath()
+	if err != nil {
+		return "", err
+	}
+	exe, err := restic.FindOnPath(sp)
+	if err != nil {
+		return "", fmt.Errorf("restic was found at %s, but not on the system PATH that the scheduled task uses (it runs as SYSTEM): "+
+			"set restic_path = '%s' in %s, preferably after moving restic.exe to a folder only administrators can change, "+
+			"or install restic for all users", found, found, cfgPath)
+	}
+	return exe, nil
 }
 
 // installWarnings reports files that the SYSTEM task executes or trusts

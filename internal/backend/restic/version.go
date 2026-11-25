@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -63,6 +66,25 @@ func FindExecutable(configured string) (string, error) {
 		return "", fmt.Errorf("restic not found on PATH: %w", err)
 	}
 	return p, nil
+}
+
+// ErrNotOnPath is returned by FindOnPath when no directory holds restic.
+var ErrNotOnPath = errors.New("restic.exe not found")
+
+// FindOnPath looks for restic.exe in the directories of pathList, a PATH
+// value, as a process with that PATH would find it.
+func FindOnPath(pathList string) (string, error) {
+	for _, dir := range filepath.SplitList(pathList) {
+		dir = strings.Trim(dir, `"`)
+		if dir == "" || !filepath.IsAbs(dir) {
+			continue
+		}
+		p := filepath.Join(dir, "restic.exe")
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+			return p, nil
+		}
+	}
+	return "", ErrNotOnPath
 }
 
 const versionTimeout = 30 * time.Second

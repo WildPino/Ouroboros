@@ -5,6 +5,7 @@ package windows
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,5 +62,16 @@ func TestFreeMemory(t *testing.T) {
 	free, err := FreeMemory()
 	if err != nil || free < 16<<20 {
 		t.Fatalf("FreeMemory = %d, %v", free, err)
+	}
+}
+
+func TestSystemPath(t *testing.T) {
+	p, err := SystemPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every Windows installation has System32 on the machine PATH.
+	if !strings.Contains(strings.ToLower(p), `\system32`) {
+		t.Fatalf("system PATH %q", p)
 	}
 }

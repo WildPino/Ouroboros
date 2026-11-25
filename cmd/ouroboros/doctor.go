@@ -45,6 +45,9 @@ type doctorEnv interface {
 	diskUsager
 	IsElevated() (bool, error)
 	FindRestic(configured string) (string, error)
+	// FindResticForSystem finds restic on the machine PATH, which the
+	// scheduled task searches when restic_path is empty.
+	FindResticForSystem() (string, error)
 	ResticVersion(ctx context.Context, exe string) (restic.Version, error)
 	// CheckWritable verifies that a file can be created in dir, or in its
 	// closest existing ancestor when dir does not exist yet.
@@ -100,6 +103,17 @@ func runDoctor(ctx context.Context, cfgPath string, env doctorEnv) ([]checkResul
 		add("restic", statusFail, "%s is version %s, need %s or later", exe, v, restic.MinVersion)
 	} else {
 		add("restic", statusOK, "%s (%s)", exe, v)
+		if configured == "" {
+			switch sysExe, err := env.FindResticForSystem(); {
+			case errors.Is(err, restic.ErrNotOnPath):
+				add("task restic", statusFail, "not on the system PATH, so the scheduled task (it runs as SYSTEM) "+
+					"would not find it: set restic_path = '%s' or install restic for all users", exe)
+			case err != nil:
+				add("task restic", statusWarn, "cannot check the system PATH: %v", err)
+			default:
+				add("task restic", statusOK, "the scheduled task will run %s", sysExe)
+			}
+		}
 	}
 
 	if cfg == nil {
@@ -188,6 +202,14 @@ func (platformEnv) IsElevated() (bool, error) { return windows.IsElevated() }
 
 func (platformEnv) FindRestic(configured string) (string, error) {
 	return restic.FindExecutable(configured)
+}
+
+func (platformEnv) FindResticForSystem() (string, error) {
+	sp, err := windows.SystemPath()
+	if err != nil {
+		return "", err
+	}
+	return restic.FindOnPath(sp)
 }
 
 func (platformEnv) ResticVersion(ctx context.Context, exe string) (restic.Version, error) {

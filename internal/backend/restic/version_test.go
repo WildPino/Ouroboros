@@ -2,9 +2,11 @@ package restic
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,5 +95,32 @@ func TestExecutableVersionMissing(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "restic.exe")
 	if _, err := ExecutableVersion(context.Background(), missing); err == nil {
 		t.Fatal("want error for missing executable")
+	}
+}
+
+func TestFindOnPath(t *testing.T) {
+	dir := t.TempDir()
+	empty, withRestic := filepath.Join(dir, "empty"), filepath.Join(dir, "bin dir")
+	for _, d := range []string{empty, withRestic, filepath.Join(dir, "restic.exe")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exe := filepath.Join(withRestic, "restic.exe")
+	if err := os.WriteFile(exe, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sep := string(os.PathListSeparator)
+
+	// A directory named restic.exe and relative entries do not count.
+	got, err := FindOnPath(strings.Join([]string{empty, dir, "relative", `"` + withRestic + `"`, ""}, sep))
+	if err != nil || got != exe {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if _, err := FindOnPath(empty + sep + dir); !errors.Is(err, ErrNotOnPath) {
+		t.Fatalf("got %v", err)
+	}
+	if _, err := FindOnPath(""); !errors.Is(err, ErrNotOnPath) {
+		t.Fatalf("empty PATH: %v", err)
 	}
 }

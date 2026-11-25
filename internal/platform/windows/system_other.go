@@ -41,3 +41,6 @@ func UntrustedWriters(path string) ([]string, error) { return nil, errors.ErrUns
 
 // FreeMemory is only implemented on Windows.
 func FreeMemory() (uint64, error) { return 0, errors.ErrUnsupported }
+
+// SystemPath is only implemented on Windows.
+func SystemPath() (string, error) { return "", errors.ErrUnsupported }

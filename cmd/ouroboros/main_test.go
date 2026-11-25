@@ -119,6 +119,8 @@ type fakeEnv struct {
 	elevatedErr error
 	resticPath  string
 	findErr     error
+	sysRestic   string
+	sysErr      error
 	version     restic.Version
 	versionErr  error
 	writableErr error
@@ -133,6 +135,7 @@ func (e *fakeEnv) FindRestic(configured string) (string, error) {
 	e.gotConfiguredRestic = configured
 	return e.resticPath, e.findErr
 }
+func (e *fakeEnv) FindResticForSystem() (string, error) { return e.sysRestic, e.sysErr }
 func (e *fakeEnv) ResticVersion(context.Context, string) (restic.Version, error) {
 	return e.version, e.versionErr
 }
@@ -147,6 +150,7 @@ func healthyEnv() *fakeEnv {
 		fakeDisk:   fakeDisk{total: 1 << 40, free: 500 << 30},
 		elevated:   true,
 		resticPath: `C:\restic\restic.exe`,
+		sysRestic:  `C:\restic\restic.exe`,
 		version:    restic.Version{Major: 0, Minor: 18, Patch: 0},
 	}
 }
@@ -186,6 +190,9 @@ func TestDoctor(t *testing.T) {
 		{"vss disabled", good, func(e *fakeEnv) { e.serviceErr = windows.ErrServiceDisabled }, "vss", statusFail, exitError},
 		{"vss missing", good, func(e *fakeEnv) { e.serviceErr = errors.New("not installed") }, "vss", statusFail, exitError},
 		{"configured restic path used", withRestic, func(e *fakeEnv) {}, "restic", statusOK, exitOK},
+		{"restic on the system PATH", good, func(e *fakeEnv) {}, "task restic", statusOK, exitOK},
+		{"restic only on the user PATH", good, func(e *fakeEnv) { e.sysErr = restic.ErrNotOnPath }, "task restic", statusFail, exitError},
+		{"system PATH unreadable", good, func(e *fakeEnv) { e.sysErr = errors.New("registry") }, "task restic", statusWarn, exitWarnings},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -208,6 +215,12 @@ func TestDoctor(t *testing.T) {
 		runDoctor(context.Background(), withRestic, env)
 		if env.gotConfiguredRestic != `C:\x\restic.exe` {
 			t.Fatalf("FindRestic got %q", env.gotConfiguredRestic)
+		}
+		// The task runs the configured path: the system PATH does not matter.
+		env.sysErr = restic.ErrNotOnPath
+		results, _ := runDoctor(context.Background(), withRestic, env)
+		if _, ok := statusOf(results, "task restic"); ok {
+			t.Fatalf("system PATH checked with restic_path set: %+v", results)
 		}
 	})
 

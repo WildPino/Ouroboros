@@ -281,6 +281,10 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
   Administrators so that a normal user cannot change what SYSTEM executes.
 - `restic_path` in config must be an absolute path to a file writable only by
   Administrators; `doctor` warns otherwise.
+- With `restic_path` empty, the task finds restic on the machine PATH, not on
+  the PATH of the user who runs `install`. `install` refuses, and `doctor`
+  fails, when restic is not on the machine PATH, and name the path to set in
+  `restic_path`.
 
 `init`:
 
