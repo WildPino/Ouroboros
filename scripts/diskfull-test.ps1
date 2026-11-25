@@ -61,7 +61,9 @@ function Write-RandomFile([string] $path, [int] $sizeMB) {
 function Invoke-Diskpart([string[]] $lines) {
     $script = Join-Path $WorkDir 'diskpart.txt'
     Set-Content -Path $script -Value $lines -Encoding Ascii
-    & diskpart /s $script | ForEach-Object { "  $_" }
+    # Write-Host keeps the output out of the return value; the transcript
+    # still records it.
+    & diskpart /s $script | ForEach-Object { Write-Host "  $_" }
     $code = $LASTEXITCODE
     Remove-Item $script
     return $code
@@ -221,7 +223,7 @@ catch {
 finally {
     if ($attached) {
         'Detaching the virtual disk'
-        Invoke-Diskpart @("select vdisk file=""$vhdx""", 'detach vdisk') | Out-Null
+        $null = Invoke-Diskpart @("select vdisk file=""$vhdx""", 'detach vdisk')
     }
     if ($violations.Count -eq 0) { 'RESULT: PASS' } else { 'RESULT: FAIL'; $violations | ForEach-Object { "  $_" } }
     if (-not $Keep) {
