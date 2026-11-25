@@ -31,12 +31,31 @@ type backupSummary struct {
 	SnapshotID          string    `json:"snapshot_id"`
 }
 
+// backupStatus is a periodic "status" line of "restic backup --json".
+type backupStatus struct {
+	PercentDone float64 `json:"percent_done"`
+	TotalFiles  uint64  `json:"total_files"`
+	FilesDone   uint64  `json:"files_done"`
+	TotalBytes  uint64  `json:"total_bytes"`
+	BytesDone   uint64  `json:"bytes_done"`
+}
+
 // parseBackupLine applies one stdout line of "restic backup --json" to res
-// and reports whether it was the summary. Progress lines are ignored.
-func parseBackupLine(line []byte, res *backend.BackupResult) (bool, error) {
+// and reports whether it was the summary. Status lines go to progress, if
+// set; other lines are ignored.
+func parseBackupLine(line []byte, res *backend.BackupResult, progress func(backend.BackupProgress)) (bool, error) {
 	var mt messageType
 	if err := json.Unmarshal(line, &mt); err != nil {
 		return false, fmt.Errorf("unexpected backup output %q: %w", truncate(line), err)
+	}
+	if mt.MessageType == "status" && progress != nil {
+		var st backupStatus
+		if err := json.Unmarshal(line, &st); err != nil {
+			return false, fmt.Errorf("parse backup status: %w", err)
+		}
+		progress(backend.BackupProgress{PercentDone: st.PercentDone, FilesDone: st.FilesDone,
+			TotalFiles: st.TotalFiles, BytesDone: st.BytesDone, TotalBytes: st.TotalBytes})
+		return false, nil
 	}
 	if mt.MessageType != "summary" {
 		return false, nil

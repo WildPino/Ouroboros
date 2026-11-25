@@ -29,7 +29,7 @@ func parseBackupFixture(t *testing.T, name string) (backend.BackupResult, bool) 
 		if len(line) == 0 {
 			continue
 		}
-		ok, err := parseBackupLine(line, &res)
+		ok, err := parseBackupLine(line, &res, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -81,13 +81,26 @@ func TestParseBackupDryRun(t *testing.T) {
 	}
 }
 
-func TestParseBackupLineIgnoresProgress(t *testing.T) {
+func TestParseBackupLineProgress(t *testing.T) {
 	var res backend.BackupResult
-	ok, err := parseBackupLine([]byte(`{"message_type":"status","percent_done":0.5}`), &res)
+	ok, err := parseBackupLine([]byte(`{"message_type":"status","percent_done":0.5}`), &res, nil)
 	if ok || err != nil {
-		t.Fatalf("status line: ok=%v err=%v", ok, err)
+		t.Fatalf("status line without callback: ok=%v err=%v", ok, err)
 	}
-	if _, err := parseBackupLine([]byte("not json"), &res); err == nil {
+	var got []backend.BackupProgress
+	for _, line := range bytes.Split(bytes.TrimSpace(fixture(t, "backup-progress.jsonl")), []byte("\n")) {
+		if _, err := parseBackupLine(line, &res, func(p backend.BackupProgress) { got = append(got, p) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(got) != 2 || got[0].PercentDone != 0.1069008434812228 || got[0].FilesDone != 0 ||
+		got[1].FilesDone != 2 || got[1].BytesDone != 211583533 || got[1].TotalBytes != 402653184 || got[1].TotalFiles != 6 {
+		t.Fatalf("progress %+v", got)
+	}
+	if res.SnapshotID == "" {
+		t.Fatal("summary after progress lines not parsed")
+	}
+	if _, err := parseBackupLine([]byte("not json"), &res, nil); err == nil {
 		t.Fatal("garbage line: want error")
 	}
 }

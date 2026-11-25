@@ -42,6 +42,20 @@ type Job struct {
 	Exclude     []string
 	ExcludeFile string
 	VSS         bool
+
+	// Progress, when set, receives restic's periodic progress reports
+	// (about one per second) from the goroutine reading its output.
+	Progress func(BackupProgress)
+}
+
+// BackupProgress is one progress report of a running backup. Totals grow
+// while restic is still scanning the sources.
+type BackupProgress struct {
+	PercentDone float64
+	FilesDone   uint64
+	TotalFiles  uint64
+	BytesDone   uint64
+	TotalBytes  uint64
 }
 
 // BackupResult reports what a backup did. BytesAddedPacked is the actual

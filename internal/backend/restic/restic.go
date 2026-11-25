@@ -139,7 +139,7 @@ func (b *Restic) Backup(ctx context.Context, job backend.Job) (backend.BackupRes
 		args:    args,
 		timeout: b.opts.Timeouts.Backup,
 		onLine: func(line []byte) error {
-			ok, err := parseBackupLine(line, &res)
+			ok, err := parseBackupLine(line, &res, job.Progress)
 			gotSummary = gotSummary || ok
 			return err
 		},
@@ -206,7 +206,7 @@ func (b *Restic) EstimateBackup(ctx context.Context, job backend.Job) (uint64, e
 		args:    args,
 		timeout: b.opts.Timeouts.Backup,
 		onLine: func(line []byte) error {
-			ok, err := parseBackupLine(line, &res)
+			ok, err := parseBackupLine(line, &res, nil)
 			gotSummary = gotSummary || ok
 			return err
 		},
