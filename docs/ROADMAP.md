@@ -136,7 +136,7 @@ adds no logic of its own.
 
 - [x] Stable `--json` output for `status`, `snapshots`, `run`, `check`,
       `restore`, `doctor`, with documented schemas and recorded fixtures
-- [ ] Progress events during `restore` and `forget-job` (one JSON line per
+- [x] Progress events during `restore` and `forget-job` (one JSON line per
       event); `run` writes `progress.json` while it works (DESIGN §12.8,
       question 8)
 - [x] `status --json` reports whether the run lock is held, and can skip
@@ -147,7 +147,7 @@ adds no logic of its own.
       tests: add, change and remove jobs and settings, validated before
       writing
 - [x] `pause` / `resume` of the scheduled task, shown by `status`
-- [ ] `forget-job NAME [--dry-run]`: deleting a removed job's snapshots
+- [x] `forget-job NAME [--dry-run]`: deleting a removed job's snapshots
       (DESIGN §12.5)
 - [ ] `init --password-stdin`, keeping the rule that the password never
       appears in arguments or environment

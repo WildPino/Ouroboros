@@ -357,7 +357,7 @@ func runRestore(ctx context.Context, opts *options, d repoDeps, ref string, ro r
 	bo := backend.RestoreOptions{SnapshotID: sn.ID, Target: target, Include: ro.include}
 	if opts.out != nil {
 		bo.Progress = func(p backend.RestoreProgress) {
-			opts.out.event("progress", restoreProgressOut{PercentDone: p.PercentDone, FilesRestored: p.FilesRestored,
+			opts.out.event("restore", restoreProgressOut{PercentDone: p.PercentDone, FilesRestored: p.FilesRestored,
 				TotalFiles: p.TotalFiles, BytesRestored: p.BytesRestored, TotalBytes: p.TotalBytes})
 		}
 	}
@@ -417,6 +417,10 @@ type snapshotOut struct {
 }
 
 func snapshotsJSON(snaps []backend.Snapshot) map[string][]snapshotOut {
+	return map[string][]snapshotOut{"snapshots": snapshotList(snaps)}
+}
+
+func snapshotList(snaps []backend.Snapshot) []snapshotOut {
 	out := []snapshotOut{}
 	for _, sn := range snaps {
 		o := snapshotOut{
@@ -431,7 +435,7 @@ func snapshotsJSON(snaps []backend.Snapshot) map[string][]snapshotOut {
 		}
 		out = append(out, o)
 	}
-	return map[string][]snapshotOut{"snapshots": out}
+	return out
 }
 
 // Schema of "restore --json"; documented in docs/JSON.md.

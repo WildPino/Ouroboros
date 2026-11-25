@@ -27,6 +27,8 @@ type fakeRepo struct {
 	checkErr   error
 	restored   backend.RestoreOptions
 	restoreErr error
+	// deletes allows Forget and Prune, which fail otherwise.
+	deletes bool
 }
 
 func (f *fakeRepo) Version(context.Context) (string, error) { return "0.20.0", nil }
@@ -38,9 +40,20 @@ func (f *fakeRepo) EstimateBackup(context.Context, backend.Job) (uint64, error) 
 func (f *fakeRepo) Snapshots(context.Context, backend.SnapshotFilter) ([]backend.Snapshot, error) {
 	return f.snaps, nil
 }
-func (f *fakeRepo) Forget(context.Context, []string) error { return errors.New("unexpected forget") }
+func (f *fakeRepo) Forget(_ context.Context, ids []string) error {
+	if !f.deletes {
+		return errors.New("unexpected forget")
+	}
+	f.calls = append(f.calls, "forget "+strings.Join(ids, ","))
+	f.snaps = slices.DeleteFunc(f.snaps, func(s backend.Snapshot) bool { return slices.Contains(ids, s.ID) })
+	return nil
+}
 func (f *fakeRepo) Prune(context.Context, backend.PruneOptions) (backend.PruneResult, error) {
-	return backend.PruneResult{}, errors.New("unexpected prune")
+	if !f.deletes {
+		return backend.PruneResult{}, errors.New("unexpected prune")
+	}
+	f.calls = append(f.calls, "prune")
+	return backend.PruneResult{}, nil
 }
 func (f *fakeRepo) Check(_ context.Context, o backend.CheckOptions) error {
 	f.calls = append(f.calls, "check "+o.ReadDataSubset)
@@ -314,7 +327,7 @@ func TestRestoreJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := decodeJSONLines(t, c.out.String())
-	if len(lines) != 2 || lines[0]["event"] != "progress" || lines[0]["data"].(map[string]any)["files_restored"] != 1.0 {
+	if len(lines) != 2 || lines[0]["event"] != "restore" || lines[0]["data"].(map[string]any)["files_restored"] != 1.0 {
 		t.Fatalf("%s", c.out)
 	}
 	res := lines[1]["data"].(map[string]any)

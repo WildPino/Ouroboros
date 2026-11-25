@@ -498,4 +498,30 @@ func TestRunEndToEnd(t *testing.T) {
 			t.Fatalf("status lacks %q:\n%s", want, &out)
 		}
 	}
+
+	// Remove the job from the configuration, then delete its backups.
+	if err := runForgetJob(ctx, opts, deps, "docs", forgetJobOptions{confirm: "docs"}); !errors.Is(err, space.ErrJobConfigured) {
+		t.Fatalf("configured job: %v", err)
+	}
+	err = config.Edit(c.cfgPath, func(cfg *config.Config) error {
+		renamed := cfg.Jobs[0]
+		renamed.Name = "documents"
+		if err := cfg.RemoveJob("docs"); err != nil {
+			return err
+		}
+		cfg.SetJob(renamed)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	must("forget-job --dry-run", runForgetJob(ctx, opts, deps, "docs", forgetJobOptions{dryRun: true}))
+	if !strings.Contains(out.String(), "would remove 3 snapshots") {
+		t.Fatalf("dry run:\n%s", &out)
+	}
+	must("forget-job", runForgetJob(ctx, opts, deps, "docs", forgetJobOptions{confirm: "docs"}))
+	if left, err := b.Snapshots(ctx, backend.SnapshotFilter{}); err != nil || len(left) != 0 {
+		t.Fatalf("left after forget-job: %v, %v", left, err)
+	}
 }

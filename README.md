@@ -156,6 +156,7 @@ vss = true
 | `ouroboros ls SNAPSHOT [FOLDER]` | List one folder of a snapshot, or its drives |
 | `ouroboros restore SNAPSHOT --target DIR [--include PATH] [--overwrite]` | Restore files (into an empty folder unless `--overwrite`) |
 | `ouroboros reclaim --dry-run` | Show what would be deleted to reach the target free space |
+| `ouroboros forget-job NAME --dry-run` / `--confirm NAME` | List, then delete, the backups of a job removed from the configuration |
 | `ouroboros pin SNAPSHOT` / `unpin` | Protect a snapshot from automatic deletion |
 | `ouroboros check [--read-data PERCENT]` | Verify repository integrity |
 | `ouroboros install` / `uninstall` | Register or remove the scheduled task |
@@ -169,8 +170,8 @@ scheduled task need the rights too. Without them, `status` shows only what it
 can read. `pin`, `unpin` and `check` refuse to run while a backup is in
 progress.
 
-`status`, `snapshots`, `ls`, `run`, `restore`, `check`, `doctor`, `pause`,
-`resume` and `version` accept `--json` for machine-readable output, described in
+`status`, `snapshots`, `ls`, `run`, `restore`, `forget-job`, `check`, `doctor`,
+`pause`, `resume` and `version` accept `--json` for machine-readable output, described in
 [docs/JSON.md](docs/JSON.md).
 
 `--config PATH` selects another configuration; the default is

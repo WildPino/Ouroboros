@@ -75,6 +75,7 @@ func newRootCmd(stdout, stderr io.Writer) (*cobra.Command, *options) {
 		newPauseCmd(opts),
 		newResumeCmd(opts),
 		newReclaimCmd(opts),
+		newForgetJobCmd(opts),
 		newInternalCmd(opts),
 	)
 	return root, opts

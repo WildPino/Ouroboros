@@ -37,6 +37,9 @@ code `3`, and its data then lists the problems.
 | `locked` | another Ouroboros process holds the run lock |
 | `not_elevated` | the command needs administrator rights |
 | `task_not_installed` | `pause` or `resume` without the scheduled task |
+| `job_configured` | `forget-job` named a job still in the configuration |
+| `no_snapshots` | `forget-job` named a job with no snapshots |
+| `not_confirmed` | `forget-job` without `--dry-run` and without `--confirm NAME` |
 | `wrong_password` | the stored password does not open the repository |
 | `repository_unavailable` | the repository does not exist at its path |
 | `repository_locked` | restic found the repository locked |
@@ -239,6 +242,40 @@ scheduled one.
 - The exit code follows the usual rules: `1` if anything failed, `4` if a job
   was skipped for lack of space, `3` with warnings.
 
+## forget-job
+
+`forget-job --json NAME --dry-run` lists what deleting a removed job's
+backups would do, and changes nothing:
+
+```json
+{
+  "job": "old-photos",
+  "snapshots": [{"id": "0001aaaa...", "short_id": "0001aaaa", "time": "2026-03-01T10:00:00Z", "job": "old-photos", "pinned": false, "hostname": "pc", "paths": ["D:\\Photos"], "files": 2140, "size_bytes": 8812040192}],
+  "pinned": [],
+  "estimated_freed_bytes": 3221225472
+}
+```
+
+`snapshots` go, oldest first; `pinned` stay. `estimated_freed_bytes` adds up
+the data each snapshot stored when it was taken; data still used by other
+snapshots stays, so the space really freed can be lower.
+
+`forget-job --json NAME --confirm NAME` deletes them, under the run lock, and
+writes `delete` events before each step, then the result:
+
+```json
+{"phase": "forget", "forgotten": 0, "total": 149}
+{"phase": "prune", "forgotten": 149, "total": 149}
+```
+
+```json
+{"job": "old-photos", "forgotten": 149, "pinned_kept": 1, "freed_bytes": 3017011200}
+```
+
+`phase` is `forget` (up to 100 snapshots per step) or `prune`, which takes
+most of the time. A job still in the configuration ends with `job_configured`
+before anything is deleted; a backup in progress, with `locked`.
+
 ## pause, resume
 
 `pause --json` and `resume --json` end with the new state. Pausing a paused
@@ -273,7 +310,7 @@ with an error line of code `path_not_found`.
 ## restore
 
 `restore --json SNAPSHOT --target DIR [--include PATH]... [--overwrite]`
-writes `progress` events, about one per second, then the result.
+writes `restore` events, about one per second, then the result.
 
 ```json
 {"percent_done": 0.36, "files_restored": 2, "total_files": 18, "bytes_restored": 146242292, "total_bytes": 402653184}

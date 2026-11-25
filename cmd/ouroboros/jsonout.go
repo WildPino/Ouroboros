@@ -109,6 +109,12 @@ func errorCode(err error) string {
 		return "check_failed"
 	case errors.Is(err, errNotElevated), errors.Is(err, errAdminRequired):
 		return "not_elevated"
+	case errors.Is(err, space.ErrJobConfigured):
+		return "job_configured"
+	case errors.Is(err, space.ErrNoJobSnapshots):
+		return "no_snapshots"
+	case errors.Is(err, errConfirmMismatch):
+		return "not_confirmed"
 	case errors.Is(err, errTaskNotInstalled):
 		return "task_not_installed"
 	case errors.Is(err, context.Canceled):
