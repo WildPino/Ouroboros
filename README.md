@@ -170,8 +170,7 @@ scheduled task need the rights too. Without them, `status` shows only what it
 can read. `pin`, `unpin` and `check` refuse to run while a backup is in
 progress.
 
-`init`, `status`, `snapshots`, `ls`, `run`, `restore`, `forget-job`, `check`,
-`doctor`, `pause`, `resume` and `version` accept `--json` for machine-readable output, described in
+All commands except `reclaim`, `pin`, `unpin` and `config` accept `--json` for machine-readable output, described in
 [docs/JSON.md](docs/JSON.md).
 
 `--config PATH` selects another configuration; the default is

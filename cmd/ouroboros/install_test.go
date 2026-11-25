@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -286,5 +287,43 @@ func TestInstallEventSourceFailureIsWarning(t *testing.T) {
 	}
 	if _, ok := c.tasks.created[windows.TaskName]; !ok {
 		t.Fatal("task not installed")
+	}
+}
+
+func TestInstallJSON(t *testing.T) {
+	ctx := context.Background()
+	c := newInstallCase(t)
+	c.deps.untrustedWriters = func(p string) ([]string, error) {
+		if p == c.exe {
+			return []string{`BUILTIN\Users`}, nil
+		}
+		return nil, nil
+	}
+	c.opts.out = &jsonLines{w: c.out, command: "install"}
+	err := runInstall(ctx, c.opts, c.deps)
+	var coded *codedError
+	if !errors.As(err, &coded) || coded.code != exitWarnings {
+		t.Fatalf("install: %v", err)
+	}
+	var inst struct {
+		Data installOut `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &inst); err != nil || inst.Data.Task != windows.TaskName ||
+		inst.Data.Command != c.exe || inst.Data.Paused || len(inst.Data.Warnings) != 1 {
+		t.Fatalf("install output %s: %v", c.out, err)
+	}
+
+	for _, want := range []bool{true, false} {
+		c.out.Reset()
+		c.opts.out = &jsonLines{w: c.out, command: "uninstall"}
+		if err := runUninstall(ctx, c.opts, c.deps); err != nil {
+			t.Fatal(err)
+		}
+		var un struct {
+			Data uninstallOut `json:"data"`
+		}
+		if err := json.Unmarshal(c.out.Bytes(), &un); err != nil || un.Data.Removed != want || un.Data.Warnings == nil {
+			t.Fatalf("uninstall output %s: %v", c.out, err)
+		}
 	}
 }

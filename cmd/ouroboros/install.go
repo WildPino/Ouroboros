@@ -72,7 +72,7 @@ func defaultInstallDeps() installDeps {
 }
 
 func newInstallCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	return supportsJSON(&cobra.Command{
 		Use:   "install",
 		Short: "Install the scheduled task that runs the backups",
 		Long: "Register the scheduled task " + windows.TaskName + ", which runs \"ouroboros run\" as\n" +
@@ -83,11 +83,11 @@ func newInstallCmd(opts *options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstall(cmd.Context(), opts, defaultInstallDeps())
 		},
-	}
+	})
 }
 
 func newUninstallCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	return supportsJSON(&cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove the scheduled task",
 		Long: "Remove the scheduled task " + windows.TaskName + ". The repository, the configuration\n" +
@@ -96,7 +96,7 @@ func newUninstallCmd(opts *options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runUninstall(cmd.Context(), opts, defaultInstallDeps())
 		},
-	}
+	})
 }
 
 func requireElevation(d installDeps, what string) error {
@@ -186,10 +186,17 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 	if err := d.tasks.Create(ctx, windows.TaskName, def); err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.stdout, "Installed scheduled task %s: runs every %s as SYSTEM.\n", windows.TaskName, cfg.Schedule.Tick.Std())
-	fmt.Fprintf(opts.stdout, "  %s run --config \"%s\"\n", exe, cfgPath)
-	if paused {
-		fmt.Fprintln(opts.stdout, `The task stays paused, as it was; "ouroboros resume" restarts automatic backups.`)
+	if opts.out != nil {
+		if warnings == nil {
+			warnings = []string{}
+		}
+		opts.out.result(installOut{Task: windows.TaskName, Command: exe, Paused: paused, Warnings: warnings})
+	} else {
+		fmt.Fprintf(opts.stdout, "Installed scheduled task %s: runs every %s as SYSTEM.\n", windows.TaskName, cfg.Schedule.Tick.Std())
+		fmt.Fprintf(opts.stdout, "  %s run --config \"%s\"\n", exe, cfgPath)
+		if paused {
+			fmt.Fprintln(opts.stdout, `The task stays paused, as it was; "ouroboros resume" restarts automatic backups.`)
+		}
 	}
 	if len(warnings) > 0 {
 		for _, w := range warnings {
@@ -253,16 +260,44 @@ func runUninstall(ctx context.Context, opts *options, d installDeps) error {
 		return err
 	}
 	if st == windows.TaskMissing {
-		fmt.Fprintf(opts.stdout, "Scheduled task %s is not installed.\n", windows.TaskName)
+		if opts.out != nil {
+			opts.out.result(uninstallOut{Removed: false, Warnings: []string{}})
+		} else {
+			fmt.Fprintf(opts.stdout, "Scheduled task %s is not installed.\n", windows.TaskName)
+		}
 		return nil
 	}
 	if err := d.tasks.Delete(ctx, windows.TaskName); err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.stdout, "Removed scheduled task %s.\n", windows.TaskName)
+	var warnings []string
 	if err := d.unregisterSource(); err != nil {
-		fmt.Fprintf(opts.stderr, "warning: cannot remove the Event Log source %s: %v\n", logging.Source, err)
+		warnings = append(warnings, fmt.Sprintf("cannot remove the Event Log source %s: %v", logging.Source, err))
+	}
+	if opts.out != nil {
+		opts.out.result(uninstallOut{Removed: true, Warnings: append([]string{}, warnings...)})
+	} else {
+		fmt.Fprintf(opts.stdout, "Removed scheduled task %s.\n", windows.TaskName)
+	}
+	for _, w := range warnings {
+		fmt.Fprintln(opts.stderr, "warning:", w)
+	}
+	if len(warnings) > 0 {
 		return &codedError{code: exitWarnings}
 	}
 	return nil
+}
+
+// Schema of "install --json" and "uninstall --json"; documented in
+// docs/JSON.md.
+type installOut struct {
+	Task     string   `json:"task"`
+	Command  string   `json:"command"`
+	Paused   bool     `json:"paused"`
+	Warnings []string `json:"warnings"`
+}
+
+type uninstallOut struct {
+	Removed  bool     `json:"removed"`
+	Warnings []string `json:"warnings"`
 }

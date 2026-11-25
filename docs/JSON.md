@@ -288,6 +288,22 @@ standard input and ends with:
 The password never appears in the output. Without `--password-stdin` the
 password is asked twice on the console, which needs an interactive console.
 
+## install, uninstall
+
+`install --json` ends with the task it registered:
+
+```json
+{"task": "\\Ouroboros\\Tick", "command": "C:\\Program Files\\Ouroboros\\ouroboros.exe", "paused": false, "warnings": []}
+```
+
+`paused` is true when a paused task was reinstalled and stays paused.
+`warnings` lists the files the task trusts that other accounts can change,
+and an Event Log source that could not be registered; with warnings the exit
+code is `3`.
+
+`uninstall --json` ends with `{"removed": true, "warnings": []}`, or
+`"removed": false` when the task was not installed.
+
 ## pause, resume
 
 `pause --json` and `resume --json` end with the new state. Pausing a paused
