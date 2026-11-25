@@ -153,6 +153,7 @@ vss = true
 | `ouroboros run [--job NAME] [--force]` | Run the due jobs, or only the named one; `--force` runs them even if not due |
 | `ouroboros status` | Jobs, last results, space usage, history depth |
 | `ouroboros snapshots [--job NAME]` | List snapshots |
+| `ouroboros ls SNAPSHOT [FOLDER]` | List one folder of a snapshot, or its drives |
 | `ouroboros restore SNAPSHOT --target DIR [--include PATH] [--overwrite]` | Restore files (into an empty folder unless `--overwrite`) |
 | `ouroboros reclaim --dry-run` | Show what would be deleted to reach the target free space |
 | `ouroboros pin SNAPSHOT` / `unpin` | Protect a snapshot from automatic deletion |
@@ -166,6 +167,10 @@ console: only administrators can read the stored password, and VSS and the
 scheduled task need the rights too. Without them, `status` shows only what it
 can read. `pin`, `unpin` and `check` refuse to run while a backup is in
 progress.
+
+`status`, `snapshots`, `ls`, `run`, `restore`, `check`, `doctor` and `version`
+accept `--json` for machine-readable output, described in
+[docs/JSON.md](docs/JSON.md).
 
 `--config PATH` selects another configuration; the default is
 `%ProgramData%\Ouroboros\ouroboros.toml`. The stored password, the state and

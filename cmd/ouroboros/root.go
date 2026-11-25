@@ -66,6 +66,7 @@ func newRootCmd(stdout, stderr io.Writer) (*cobra.Command, *options) {
 		newStatusCmd(opts),
 		newSnapshotsCmd(opts),
 		newRestoreCmd(opts),
+		newLsCmd(opts),
 		newPinCmd(opts, true),
 		newPinCmd(opts, false),
 		newCheckCmd(opts),

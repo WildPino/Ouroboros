@@ -40,6 +40,7 @@ code `3`, and its data then lists the problems.
 | `repository_unavailable` | the repository does not exist at its path |
 | `repository_locked` | restic found the repository locked |
 | `nothing_matched` | a restore selection matched nothing in the snapshot |
+| `path_not_found` | `ls` was given a folder the snapshot does not have |
 | `cannot_reclaim` | not enough space could be freed for a backup |
 | `backup_too_large` | a backup can never fit in the partition |
 | `timeout` | restic exceeded its configured timeout |
@@ -235,3 +236,52 @@ scheduled one.
 - `errors` are failures outside the jobs: retention, prune, check.
 - The exit code follows the usual rules: `1` if anything failed, `4` if a job
   was skipped for lack of space, `3` with warnings.
+
+## ls
+
+`ls --json SNAPSHOT [FOLDER]` lists the entries directly inside FOLDER, or
+the drives when FOLDER is omitted. FOLDER is a Windows path whose letter case
+must match the snapshot's; passing back a `path` from a previous listing
+always works.
+
+```json
+{
+  "snapshot_id": "a188c03dec1f84ed59df94dff8177186d26e7d65e1edf21bbbbc80e2e14368c0",
+  "folder": "C:\\Users\\name\\Documents",
+  "entries": [
+    {"name": "taxes", "type": "dir", "path": "C:\\Users\\name\\Documents\\taxes", "size_bytes": null, "modified": "2026-11-20T17:26:49Z"},
+    {"name": "cv.pdf", "type": "file", "path": "C:\\Users\\name\\Documents\\cv.pdf", "size_bytes": 48211, "modified": "2026-10-02T08:11:03Z"}
+  ]
+}
+```
+
+`folder` is empty for the drive list. `type` is `dir`, `file` or `symlink`;
+`size_bytes` is set for files only. A folder the snapshot does not have ends
+with an error line of code `path_not_found`.
+
+## restore
+
+`restore --json SNAPSHOT --target DIR [--include PATH]... [--overwrite]`
+writes `progress` events, about one per second, then the result.
+
+```json
+{"percent_done": 0.36, "files_restored": 2, "total_files": 18, "bytes_restored": 146242292, "total_bytes": 402653184}
+```
+
+```json
+{
+  "snapshot_id": "a188c03dec1f84ed59df94dff8177186d26e7d65e1edf21bbbbc80e2e14368c0",
+  "job": "docs",
+  "time": "2026-11-25T20:18:10Z",
+  "target": "C:\\Users\\name\\Desktop\\Restored 2026-11-25",
+  "total_files": 18,
+  "files_restored": 17,
+  "total_bytes": 402653184,
+  "bytes_restored": 402653184
+}
+```
+
+`total_files` counts the files and folders the selection matched;
+`files_restored` leaves out those already present and identical. A selection
+that matches nothing ends with an error line of code `nothing_matched`.
+Stopping the process stops the restore; the files restored so far stay.

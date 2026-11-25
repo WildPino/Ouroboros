@@ -323,7 +323,7 @@ func newRestoreCmd(opts *options) *cobra.Command {
 	cmd.Flags().StringArrayVar(&ro.include, "include", nil, "restore only paths matching this `PATTERN` (repeatable)")
 	cmd.Flags().BoolVar(&ro.overwrite, "overwrite", false, "allow a target folder that is not empty")
 	cmd.MarkFlagRequired("target")
-	return cmd
+	return supportsJSON(cmd)
 }
 
 func runRestore(ctx context.Context, opts *options, d repoDeps, ref string, ro restoreOptions) error {
@@ -350,8 +350,24 @@ func runRestore(ctx context.Context, opts *options, d repoDeps, ref string, ro r
 	if err != nil {
 		return err
 	}
-	if err := s.backend.Restore(ctx, backend.RestoreOptions{SnapshotID: sn.ID, Target: target, Include: ro.include}); err != nil {
+	bo := backend.RestoreOptions{SnapshotID: sn.ID, Target: target, Include: ro.include}
+	if opts.out != nil {
+		bo.Progress = func(p backend.RestoreProgress) {
+			opts.out.event("progress", restoreProgressOut{PercentDone: p.PercentDone, FilesRestored: p.FilesRestored,
+				TotalFiles: p.TotalFiles, BytesRestored: p.BytesRestored, TotalBytes: p.TotalBytes})
+		}
+	}
+	res, err := s.backend.Restore(ctx, bo)
+	if err != nil {
 		return err
+	}
+	if opts.out != nil {
+		opts.out.result(restoreOut{
+			SnapshotID: sn.ID, Job: sn.Job(), Time: sn.Time.UTC(), Target: target,
+			TotalFiles: res.TotalFiles, FilesRestored: res.FilesRestored,
+			TotalBytes: res.TotalBytes, BytesRestored: res.BytesRestored,
+		})
+		return nil
 	}
 	fmt.Fprintf(opts.stdout, "Restored snapshot %s (%s, %s) to %s\n", shortID(sn.ID), sn.Job(),
 		sn.Time.Local().Format(time.DateTime), target)
@@ -412,4 +428,24 @@ func snapshotsJSON(snaps []backend.Snapshot) map[string][]snapshotOut {
 		out = append(out, o)
 	}
 	return map[string][]snapshotOut{"snapshots": out}
+}
+
+// Schema of "restore --json"; documented in docs/JSON.md.
+type restoreProgressOut struct {
+	PercentDone   float64 `json:"percent_done"`
+	FilesRestored uint64  `json:"files_restored"`
+	TotalFiles    uint64  `json:"total_files"`
+	BytesRestored uint64  `json:"bytes_restored"`
+	TotalBytes    uint64  `json:"total_bytes"`
+}
+
+type restoreOut struct {
+	SnapshotID    string    `json:"snapshot_id"`
+	Job           string    `json:"job"`
+	Time          time.Time `json:"time"`
+	Target        string    `json:"target"`
+	TotalFiles    uint64    `json:"total_files"`
+	FilesRestored uint64    `json:"files_restored"`
+	TotalBytes    uint64    `json:"total_bytes"`
+	BytesRestored uint64    `json:"bytes_restored"`
 }

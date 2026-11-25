@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -21,10 +22,11 @@ import (
 // fakeRepo is a backend.Backend that records the calls that change or
 // read data.
 type fakeRepo struct {
-	snaps    []backend.Snapshot
-	calls    []string
-	checkErr error
-	restored backend.RestoreOptions
+	snaps      []backend.Snapshot
+	calls      []string
+	checkErr   error
+	restored   backend.RestoreOptions
+	restoreErr error
 }
 
 func (f *fakeRepo) Version(context.Context) (string, error) { return "0.20.0", nil }
@@ -44,10 +46,24 @@ func (f *fakeRepo) Check(_ context.Context, o backend.CheckOptions) error {
 	f.calls = append(f.calls, "check "+o.ReadDataSubset)
 	return f.checkErr
 }
-func (f *fakeRepo) Restore(_ context.Context, o backend.RestoreOptions) error {
+func (f *fakeRepo) Restore(_ context.Context, o backend.RestoreOptions) (backend.RestoreResult, error) {
 	f.calls = append(f.calls, "restore "+o.SnapshotID)
 	f.restored = o
-	return nil
+	if o.Progress != nil {
+		o.Progress(backend.RestoreProgress{PercentDone: 0.5, FilesRestored: 1, TotalFiles: 2})
+	}
+	return backend.RestoreResult{TotalFiles: 2, FilesRestored: 2, TotalBytes: 20, BytesRestored: 20}, f.restoreErr
+}
+func (f *fakeRepo) List(_ context.Context, id, dir string) ([]backend.Node, error) {
+	f.calls = append(f.calls, "ls "+id+" "+dir)
+	if dir == "/missing" || dir == "/C/missing" {
+		return nil, backend.ErrPathNotFound
+	}
+	t := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	return []backend.Node{
+		{Name: "a.txt", Type: "file", Path: path.Join(dir, "a.txt"), Size: 5, ModTime: t},
+		{Name: "sub", Type: "dir", Path: path.Join(dir, "sub"), ModTime: t},
+	}, nil
 }
 func (f *fakeRepo) Tag(_ context.Context, id string, add, remove []string) error {
 	f.calls = append(f.calls, "tag "+id+" +"+strings.Join(add, ",")+" -"+strings.Join(remove, ","))
@@ -287,5 +303,56 @@ func TestCheckJSON(t *testing.T) {
 	err := runCheck(context.Background(), c.opts, c.deps, 0)
 	if errorCode(err) != "check_failed" || !strings.Contains(err.Error(), "repository check failed: pack damaged") {
 		t.Fatalf("got %v (%s)", err, errorCode(err))
+	}
+}
+
+func TestRestoreJSON(t *testing.T) {
+	c := newRepoCase(t)
+	c.opts.out = &jsonLines{w: c.out, command: "restore"}
+	target := filepath.Join(c.dir, "restore")
+	if err := runRestore(context.Background(), c.opts, c.deps, "aaaa1", restoreOptions{target: target}); err != nil {
+		t.Fatal(err)
+	}
+	lines := decodeJSONLines(t, c.out.String())
+	if len(lines) != 2 || lines[0]["event"] != "progress" || lines[0]["data"].(map[string]any)["files_restored"] != 1.0 {
+		t.Fatalf("%s", c.out)
+	}
+	res := lines[1]["data"].(map[string]any)
+	if res["snapshot_id"] != "aaaa1111bbbb" || res["target"] != target || res["files_restored"] != 2.0 || res["job"] != "docs" {
+		t.Fatalf("result %v", res)
+	}
+}
+
+func TestLsCommand(t *testing.T) {
+	c := newRepoCase(t)
+	ctx := context.Background()
+	if err := runLs(ctx, c.opts, c.deps, "aaaa1", `C:\docs`); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.out.String(), `2 entries in C:\docs`) || !strings.Contains(c.out.String(), "5 B") {
+		t.Fatalf("%s", c.out)
+	}
+	if c.repo.calls[len(c.repo.calls)-1] != "ls aaaa1111bbbb /C/docs" || c.locked != 0 {
+		t.Fatalf("calls %v locked %d", c.repo.calls, c.locked)
+	}
+
+	c.out.Reset()
+	c.opts.out = &jsonLines{w: c.out, command: "ls"}
+	if err := runLs(ctx, c.opts, c.deps, "aaaa1", ""); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Data lsOut `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	e := got.Data.Entries
+	if got.Data.Folder != "" || len(e) != 2 || e[0].SizeBytes == nil || e[1].SizeBytes != nil || e[1].Path != "\\sub" {
+		t.Fatalf("%+v", got.Data)
+	}
+	err := runLs(ctx, c.opts, c.deps, "aaaa1", `C:\missing`)
+	if errorCode(err) != "path_not_found" {
+		t.Fatalf("got %v", err)
 	}
 }

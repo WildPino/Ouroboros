@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/WildPino/ouroboros/internal/backend"
 	"github.com/WildPino/ouroboros/internal/backend/restic"
 	"github.com/WildPino/ouroboros/internal/config"
 	"github.com/WildPino/ouroboros/internal/lock"
@@ -94,6 +95,8 @@ func errorCode(err error) string {
 		return "repository_unavailable"
 	case errors.Is(err, restic.ErrRepoLocked):
 		return "repository_locked"
+	case errors.Is(err, backend.ErrPathNotFound):
+		return "path_not_found"
 	case errors.Is(err, restic.ErrNothingMatched):
 		return "nothing_matched"
 	case errors.Is(err, restic.ErrTimeout):

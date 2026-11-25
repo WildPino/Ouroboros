@@ -134,7 +134,7 @@ Done when: DESIGN.md §12 has no open question left and the owner approved it.
 Everything the window needs exists first as a tested command, so the window
 adds no logic of its own.
 
-- [ ] Stable `--json` output for `status`, `snapshots`, `run`, `check`,
+- [x] Stable `--json` output for `status`, `snapshots`, `run`, `check`,
       `restore`, `doctor`, with documented schemas and recorded fixtures
 - [ ] Progress events during `restore` and `forget-job` (one JSON line per
       event); `run` writes `progress.json` while it works (DESIGN §12.8,
@@ -142,7 +142,7 @@ adds no logic of its own.
 - [x] `status --json` reports whether the run lock is held, and can skip
       the snapshot listing; `run --json` reports `locked` instead of
       "nothing to do"
-- [ ] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time
+- [x] `ls SNAPSHOT [PATH]` to browse a snapshot one folder at a time
 - [ ] Configuration editing library API in `config`, used by the window and
       tests: add, change and remove jobs and settings, validated before
       writing
