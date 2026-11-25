@@ -55,18 +55,28 @@ func DeleteTask(ctx context.Context, name string) error {
 	return runSchtasks(ctx, "/Delete", "/TN", name, "/F")
 }
 
-// TaskExists reports whether a scheduled task is registered.
-func TaskExists(ctx context.Context, name string) (bool, error) {
-	err := exec.CommandContext(ctx, schtasks(), "/Query", "/TN", name).Run()
+// QueryTask reports whether a scheduled task is registered and enabled.
+func QueryTask(ctx context.Context, name string) (TaskState, error) {
+	out, err := exec.CommandContext(ctx, schtasks(), "/Query", "/TN", name, "/XML").Output()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:
-		return true, nil
+		return taskStateFromXML(out)
 	case errors.As(err, &exit) && exit.ExitCode() == 1:
-		return false, nil
+		return TaskMissing, nil
 	default:
-		return false, fmt.Errorf("schtasks /Query: %w", err)
+		return TaskMissing, fmt.Errorf("schtasks /Query: %w", err)
 	}
+}
+
+// SetTaskEnabled enables or disables a registered task. A disabled task
+// does not start, but an instance already running goes on.
+func SetTaskEnabled(ctx context.Context, name string, enabled bool) error {
+	flag := "/DISABLE"
+	if enabled {
+		flag = "/ENABLE"
+	}
+	return runSchtasks(ctx, "/Change", "/TN", name, flag)
 }
 
 // Accounts that may write to the programs a SYSTEM task runs.

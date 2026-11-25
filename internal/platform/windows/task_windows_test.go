@@ -57,9 +57,14 @@ func TestUntrustedWriters(t *testing.T) {
 	}
 }
 
-func TestTaskExistsMissing(t *testing.T) {
-	ok, err := TaskExists(t.Context(), `\OuroborosTestNoSuchTask\Nope`)
-	if err != nil || ok {
-		t.Fatalf("got %v, %v", ok, err)
+func TestQueryTask(t *testing.T) {
+	st, err := QueryTask(t.Context(), `\OuroborosTestNoSuchTask\Nope`)
+	if err != nil || st != TaskMissing {
+		t.Fatalf("missing task: %v, %v", st, err)
+	}
+	// A task every Windows installation has; querying it changes nothing.
+	st, err = QueryTask(t.Context(), `\Microsoft\Windows\Defrag\ScheduledDefrag`)
+	if err != nil || st == TaskMissing {
+		t.Fatalf("defrag task: %v, %v", st, err)
 	}
 }

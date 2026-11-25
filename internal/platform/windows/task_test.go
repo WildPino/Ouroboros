@@ -103,3 +103,48 @@ func TestTaskXMLIsUTF16(t *testing.T) {
 		t.Fatalf("decoded:\n%s", s)
 	}
 }
+
+func TestTaskStateFromXML(t *testing.T) {
+	enabled := `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+    <TimeTrigger>
+      <Enabled>false</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+    </IdleSettings>
+  </Settings>
+</Task>`
+	disabled := strings.Replace(enabled, "<IdleSettings>", "<Enabled>false</Enabled>\n    <IdleSettings>", 1)
+	explicit := strings.Replace(enabled, "<IdleSettings>", "<Enabled>true</Enabled>\n    <IdleSettings>", 1)
+	for in, want := range map[string]TaskState{enabled: TaskEnabled, disabled: TaskDisabled, explicit: TaskEnabled} {
+		if got, err := taskStateFromXML([]byte(in)); err != nil || got != want {
+			t.Errorf("got %v, %v; want %v for\n%s", got, err, want, in)
+		}
+	}
+	if _, err := taskStateFromXML([]byte("ERROR: something")); err == nil {
+		t.Error("output without settings accepted")
+	}
+}
+
+func TestTaskXMLPaused(t *testing.T) {
+	spec := TaskSpec{Command: `C:\Program Files\Ouroboros\ouroboros.exe`, Interval: 15 * time.Minute}
+	for _, paused := range []bool{false, true} {
+		spec.Paused = paused
+		doc, err := taskXMLUTF8(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := TaskEnabled
+		if paused {
+			want = TaskDisabled
+		}
+		if got, err := taskStateFromXML(doc); err != nil || got != want {
+			t.Errorf("paused=%v: state %v, %v", paused, got, err)
+		}
+	}
+}

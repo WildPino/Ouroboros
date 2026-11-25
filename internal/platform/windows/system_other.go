@@ -33,8 +33,15 @@ func CreateTask(ctx context.Context, name string, def []byte) error { return err
 // DeleteTask is only implemented on Windows.
 func DeleteTask(ctx context.Context, name string) error { return errors.ErrUnsupported }
 
-// TaskExists is only implemented on Windows.
-func TaskExists(ctx context.Context, name string) (bool, error) { return false, errors.ErrUnsupported }
+// QueryTask is only implemented on Windows.
+func QueryTask(ctx context.Context, name string) (TaskState, error) {
+	return TaskMissing, errors.ErrUnsupported
+}
+
+// SetTaskEnabled is only implemented on Windows.
+func SetTaskEnabled(ctx context.Context, name string, enabled bool) error {
+	return errors.ErrUnsupported
+}
 
 // UntrustedWriters is only implemented on Windows.
 func UntrustedWriters(path string) ([]string, error) { return nil, errors.ErrUnsupported }

@@ -20,6 +20,46 @@ type TaskSpec struct {
 	RunOnBattery bool          // start even when on battery power
 	Start        time.Time     // first trigger; local wall-clock time is used
 	Description  string
+	Paused       bool // registered disabled, so that reinstalling keeps a pause
+}
+
+// TaskState is the registration state of a scheduled task.
+type TaskState int
+
+const (
+	TaskMissing TaskState = iota
+	TaskEnabled
+	TaskDisabled
+)
+
+func (s TaskState) String() string {
+	switch s {
+	case TaskEnabled:
+		return "enabled"
+	case TaskDisabled:
+		return "disabled"
+	default:
+		return "missing"
+	}
+}
+
+// taskStateFromXML reads the state from "schtasks /Query /XML" output. The
+// task-wide switch is Settings/Enabled, omitted when true; triggers have an
+// Enabled of their own, which is not the one "schtasks /Change /DISABLE"
+// sets. The output is searched as bytes because schtasks declares UTF-16
+// but writes in the console code page.
+func taskStateFromXML(out []byte) (TaskState, error) {
+	s := string(out)
+	start := strings.Index(s, "<Settings>")
+	end := strings.Index(s, "</Settings>")
+	if start < 0 || end < start {
+		return TaskMissing, errors.New("schtasks /Query: no task settings in the output")
+	}
+	settings := s[start:end]
+	if strings.Contains(strings.ReplaceAll(settings, " ", ""), "<Enabled>false</Enabled>") {
+		return TaskDisabled, nil
+	}
+	return TaskEnabled, nil
 }
 
 // taskDocument mirrors the Task Scheduler 1.2 schema, in schema order.
@@ -141,7 +181,7 @@ func taskXMLUTF8(spec TaskSpec) ([]byte, error) {
 			StartWhenAvailable: true,
 			IdleSettings:       taskIdleSettings{},
 			AllowStartOnDemand: true,
-			Enabled:            true,
+			Enabled:            !spec.Paused,
 			// Backups may take days; restic timeouts bound hung processes.
 			ExecutionTimeLimit: "PT0S",
 			Priority:           7,
