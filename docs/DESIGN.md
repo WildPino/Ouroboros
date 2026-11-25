@@ -515,11 +515,21 @@ the window says so before saving a file that it did not write itself.
 
 Removing a job leaves its snapshots in the repository. They are ordinary
 deletion candidates (§3.5), except the newest `keep_min_snapshots` of the job,
-which stay protected until the user deletes them. The window offers "Delete
-this job's backups": the space manager forgets them and prunes, after showing
-the list. This is an explicit request, so the protections for the newest and
-recent snapshots do not apply; pinned snapshots are kept unless unpinned
-first.
+which stay protected until the user deletes them.
+
+"Delete this job's backups" is the one deletion outside the planner's
+automatic decisions, allowed as an explicit exception:
+
+- it exists only for a job tag that is no longer in the configuration;
+- it first lists the snapshots that would go and the space expected back
+  (the same `--dry-run` path as the command line);
+- the user confirms by typing the job name;
+- pinned snapshots are kept unless unpinned first; the protections for the
+  newest and recent snapshots do not apply, because this is the user's
+  explicit request;
+- the deletion runs in `internal/space` through the same `forget` and
+  `prune` code as the planner, under the run lock, and is logged and
+  recorded in the history like a reclaim.
 
 Pausing automatic backups disables the scheduled task; resuming enables it.
 
@@ -647,13 +657,13 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    in M8.5. If the shell is not running, the window falls back to its own
    folders and says so. The WebView2 user data folder belongs to the
    account the window runs as (§12.6).
-6. Interface language: English only, or English and Italian.
+6. Interface language. Settled: English only in 0.2.0. Every string the
+   page shows lives in one table, so a translation can be added later
+   without touching the screens.
 7. The bridge contract: every call the page can make, with arguments,
    results and errors.
 8. Progress and concurrency: how "Back up now" reports progress and behaves
    when the scheduled task is already running.
-9. Deleting a removed job's snapshots (§12.5): the agent rules allow
-   deletions only through the planner with the §3.5 protections. Allowed as
-   an explicit exception, not offered, or limited to what the planner could
-   delete anyway.
+9. Deleting a removed job's snapshots. Settled: allowed as the explicit
+   exception described in §12.5.
 10. Wireframes of every screen, approved before the interface is built.

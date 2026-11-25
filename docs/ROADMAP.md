@@ -117,12 +117,12 @@ DESIGN.md §12.
 - [x] Self-removal on uninstall and replacing a running executable on update
 - [x] Identifying the interactive user's known folders from an elevated
       process
-- [ ] Interface language (English only, or English and Italian)
+- [x] Interface language (English only, or English and Italian)
 - [ ] Bridge contract: the list of calls the page can make, their arguments,
       results and errors; nothing else is reachable from the page
 - [ ] Wireframes of every screen: setup steps, main window, job editor,
       settings, restore, uninstall
-- [ ] Deleting a removed job's snapshots: allowed or not, and under which
+- [x] Deleting a removed job's snapshots: allowed or not, and under which
       protections (the agent rules allow deletions only through the planner
       with the §3.5 protections)
 - [ ] Owner sign-off on DESIGN.md §12 before M8.1
