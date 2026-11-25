@@ -186,7 +186,7 @@ func TestIntegrationLifecycle(t *testing.T) {
 	}
 
 	target := filepath.Join(env.dir, "restore")
-	if err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: pinned.ID, Target: target}); err != nil {
+	if _, err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: pinned.ID, Target: target}); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 	restored := findFile(t, target, "a.txt")

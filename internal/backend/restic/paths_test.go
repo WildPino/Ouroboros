@@ -64,7 +64,7 @@ func TestIntegrationLongAndUnicodePaths(t *testing.T) {
 	}
 
 	target := filepath.Join(e.dir, "ripristino ü")
-	if err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: res.SnapshotID, Target: target}); err != nil {
+	if _, err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: res.SnapshotID, Target: target}); err != nil {
 		t.Fatal(err)
 	}
 	found := map[string][]byte{}

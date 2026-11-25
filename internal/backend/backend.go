@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"time"
@@ -31,8 +32,12 @@ type Backend interface {
 	Forget(ctx context.Context, ids []string) error
 	Prune(ctx context.Context, opts PruneOptions) (PruneResult, error)
 	Check(ctx context.Context, opts CheckOptions) error
-	Restore(ctx context.Context, opts RestoreOptions) error
+	Restore(ctx context.Context, opts RestoreOptions) (RestoreResult, error)
 	Tag(ctx context.Context, id string, add, remove []string) error
+	// List returns the entries directly inside dir in a snapshot, dir in
+	// the snapshot's own form ("/" or "/C/Users/me"), matched with exact
+	// letter case.
+	List(ctx context.Context, id, dir string) ([]Node, error)
 }
 
 // Job describes what one backup run reads.
@@ -135,4 +140,39 @@ type RestoreOptions struct {
 	SnapshotID string
 	Target     string
 	Include    []string
+
+	// Progress, when set, receives restic's periodic progress reports from
+	// the goroutine reading its output.
+	Progress func(RestoreProgress)
 }
+
+// RestoreProgress is one progress report of a running restore.
+type RestoreProgress struct {
+	PercentDone   float64
+	FilesRestored uint64
+	TotalFiles    uint64
+	BytesRestored uint64
+	TotalBytes    uint64
+}
+
+// RestoreResult reports what a restore did. TotalFiles counts the files
+// and folders the selection matched; FilesRestored excludes those already
+// present and identical.
+type RestoreResult struct {
+	TotalFiles    uint64
+	FilesRestored uint64
+	TotalBytes    uint64
+	BytesRestored uint64
+}
+
+// Node is one entry of a snapshot listing.
+type Node struct {
+	Name    string
+	Type    string // "dir", "file" or "symlink"
+	Path    string // in the snapshot's form, such as /C/Users/me/file.txt
+	Size    uint64 // files only
+	ModTime time.Time
+}
+
+// ErrPathNotFound is returned by List for a folder the snapshot lacks.
+var ErrPathNotFound = errors.New("no such folder in the snapshot")

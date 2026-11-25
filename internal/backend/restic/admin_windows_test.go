@@ -87,7 +87,7 @@ func TestAdminLockedFileVSS(t *testing.T) {
 		t.Fatalf("with VSS: incomplete: %v", withVSS.Warnings)
 	}
 	target := filepath.Join(e.dir, "restored")
-	if err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: withVSS.SnapshotID, Target: target}); err != nil {
+	if _, err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: withVSS.SnapshotID, Target: target}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(findFile(t, target, "mailbox.pst"))

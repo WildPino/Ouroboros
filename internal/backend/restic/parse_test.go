@@ -222,14 +222,30 @@ func TestNewValidatesOptions(t *testing.T) {
 	}
 }
 
-func TestRestoreTotalFiles(t *testing.T) {
-	for file, want := range map[string]uint64{"restore.jsonl": 3, "restore-nothing.jsonl": 0} {
+func TestParseRestoreLines(t *testing.T) {
+	for file, want := range map[string]backend.RestoreResult{
+		"restore.jsonl":         {TotalFiles: 3, FilesRestored: 10, TotalBytes: 3, BytesRestored: 3},
+		"restore-nothing.jsonl": {},
+	} {
 		data, err := os.ReadFile(filepath.Join("testdata", file))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := restoreTotalFiles(data); got != want {
-			t.Errorf("%s: %d files, want %d", file, got, want)
+		var res backend.RestoreResult
+		var progress []backend.RestoreProgress
+		for line := range bytes.Lines(data) {
+			if err := parseRestoreLine(bytes.TrimSpace(line), &res, func(p backend.RestoreProgress) { progress = append(progress, p) }); err != nil {
+				t.Fatal(err)
+			}
 		}
+		if res != want {
+			t.Errorf("%s: %+v, want %+v", file, res, want)
+		}
+		if file == "restore.jsonl" && (len(progress) != 1 || progress[0].PercentDone != 0.5 || progress[0].FilesRestored != 1) {
+			t.Errorf("progress %+v", progress)
+		}
+	}
+	if err := parseRestoreLine([]byte("garbage"), &backend.RestoreResult{}, nil); err == nil {
+		t.Fatal("garbage accepted")
 	}
 }

@@ -182,16 +182,27 @@ func truncate(b []byte) string {
 
 // restoreTotalFiles returns the number of files that "restic restore --json"
 // selected, from its summary line; 0 when the summary has none.
-func restoreTotalFiles(stdout []byte) uint64 {
-	var total uint64
-	for line := range bytes.Lines(stdout) {
-		var s struct {
-			MessageType string `json:"message_type"`
-			TotalFiles  uint64 `json:"total_files"`
-		}
-		if json.Unmarshal(bytes.TrimSpace(line), &s) == nil && s.MessageType == "summary" {
-			total = s.TotalFiles
-		}
+func parseRestoreLine(line []byte, res *backend.RestoreResult, progress func(backend.RestoreProgress)) error {
+	var s struct {
+		MessageType   string  `json:"message_type"`
+		PercentDone   float64 `json:"percent_done"`
+		TotalFiles    uint64  `json:"total_files"`
+		FilesRestored uint64  `json:"files_restored"`
+		TotalBytes    uint64  `json:"total_bytes"`
+		BytesRestored uint64  `json:"bytes_restored"`
 	}
-	return total
+	if err := json.Unmarshal(line, &s); err != nil {
+		return fmt.Errorf("unexpected restore output %q: %w", truncate(line), err)
+	}
+	switch s.MessageType {
+	case "status":
+		if progress != nil {
+			progress(backend.RestoreProgress{PercentDone: s.PercentDone, FilesRestored: s.FilesRestored,
+				TotalFiles: s.TotalFiles, BytesRestored: s.BytesRestored, TotalBytes: s.TotalBytes})
+		}
+	case "summary":
+		*res = backend.RestoreResult{TotalFiles: s.TotalFiles, FilesRestored: s.FilesRestored,
+			TotalBytes: s.TotalBytes, BytesRestored: s.BytesRestored}
+	}
+	return nil
 }

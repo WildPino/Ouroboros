@@ -39,7 +39,7 @@ func TestIntegrationExcludeIgnoresCase(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(e.dir, "out")
-	if err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: res.SnapshotID, Target: target}); err != nil {
+	if _, err := b.Restore(ctx, backend.RestoreOptions{SnapshotID: res.SnapshotID, Target: target}); err != nil {
 		t.Fatal(err)
 	}
 	if findFileOrEmpty(t, target, "k.txt") == "" {

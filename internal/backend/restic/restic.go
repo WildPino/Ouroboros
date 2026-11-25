@@ -15,7 +15,7 @@ import (
 
 // Timeouts bound each kind of restic operation.
 type Timeouts struct {
-	Short   time.Duration // init, snapshots, forget, tag
+	Short   time.Duration // init, snapshots, forget, tag, ls
 	Backup  time.Duration
 	Prune   time.Duration
 	Check   time.Duration
@@ -280,12 +280,13 @@ func (b *Restic) Check(ctx context.Context, opts backend.CheckOptions) error {
 }
 
 // Restore extracts a snapshot (or the included parts of it) into a directory.
-func (b *Restic) Restore(ctx context.Context, opts backend.RestoreOptions) error {
+func (b *Restic) Restore(ctx context.Context, opts backend.RestoreOptions) (backend.RestoreResult, error) {
+	var res backend.RestoreResult
 	if opts.Target == "" {
-		return errors.New("restic restore: no target directory")
+		return res, errors.New("restic restore: no target directory")
 	}
 	if err := checkIDs(opts.SnapshotID); err != nil {
-		return err
+		return res, err
 	}
 	args := []string{"restore", "--json", "--target", opts.Target}
 	for _, inc := range opts.Include {
@@ -293,15 +294,19 @@ func (b *Restic) Restore(ctx context.Context, opts backend.RestoreOptions) error
 		args = append(args, "--iinclude", includePattern(inc))
 	}
 	args = append(args, "--", opts.SnapshotID)
-	out, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Restore})
+	_, err := b.run(ctx, call{
+		args:    args,
+		timeout: b.opts.Timeouts.Restore,
+		onLine:  func(line []byte) error { return parseRestoreLine(line, &res, opts.Progress) },
+	})
 	if err != nil {
-		return err
+		return res, err
 	}
 	// restic reports success when the patterns match nothing.
-	if len(opts.Include) > 0 && restoreTotalFiles(out.stdout) == 0 {
-		return fmt.Errorf("%w: %s", ErrNothingMatched, strings.Join(opts.Include, ", "))
+	if len(opts.Include) > 0 && res.TotalFiles == 0 {
+		return res, fmt.Errorf("%w: %s", ErrNothingMatched, strings.Join(opts.Include, ", "))
 	}
-	return nil
+	return res, nil
 }
 
 // includePattern turns a Windows path into the form restic matches
@@ -317,6 +322,42 @@ func includePattern(p string) string {
 }
 
 func isASCIILetter(c byte) bool { return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' }
+
+// List returns the entries directly inside dir in snapshot id.
+func (b *Restic) List(ctx context.Context, id, dir string) ([]backend.Node, error) {
+	if err := checkIDs(id); err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(dir, "/") {
+		return nil, fmt.Errorf("restic ls: %q is not a snapshot path", dir)
+	}
+	var nodes []backend.Node
+	found := dir == "/"
+	_, err := b.run(ctx, call{
+		args:    []string{"ls", "--json", "--", id, dir},
+		timeout: b.opts.Timeouts.Short,
+		onLine: func(line []byte) error {
+			n, ok, err := parseLsLine(line)
+			if err != nil || !ok {
+				return err
+			}
+			// restic lists the folder itself before its entries.
+			if n.Path == dir {
+				found = true
+				return nil
+			}
+			nodes = append(nodes, n)
+			return nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: %s", backend.ErrPathNotFound, dir)
+	}
+	return nodes, nil
+}
 
 // Tag adds and removes tags. restic rewrites the snapshot, so its ID changes.
 func (b *Restic) Tag(ctx context.Context, id string, add, remove []string) error {
