@@ -617,8 +617,24 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      update, each checked against its SHA-256 after extraction.
    - Expected download: about 20 MB (restic 40 MB compresses to 14 MB; the
      command line and the window add about 6 MB).
-4. Uninstall: how `Ouroboros.exe` removes itself, and how an update replaces
-   a running executable.
+4. Update and uninstall. Settled. Windows refuses to delete or overwrite a
+   running executable but allows renaming it, and the renamed file can be
+   deleted once the process ends (checked on Windows 11).
+   - Setup and uninstall first take the same named lock as `run` (§4), so a
+     scheduled run never starts while files change; if a run is in progress
+     they wait for it, showing that a backup is finishing. A second window of
+     `Ouroboros.exe` is asked to close.
+   - Each file is replaced in four steps: write `NAME.new` and check its
+     SHA-256; rename the current file to `NAME.old` (allowed even while it
+     runs); rename `NAME.new` to `NAME`; delete `NAME.old`, or, if it is
+     still running, mark it for deletion at the next restart with
+     `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)`. Both programs also delete
+     leftover `*.old` files in their folder when they start. An interruption
+     at any step leaves either the old or the new file under `NAME`.
+   - Uninstall removes everything else, then marks the running
+     `Ouroboros.exe` and the then empty program folder for deletion at the
+     next restart, and says so. No helper copy is started from a temporary
+     folder.
 5. The interactive user's known folders from an elevated process (§12.3).
 6. Interface language: English only, or English and Italian.
 7. The bridge contract: every call the page can make, with arguments,

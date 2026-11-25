@@ -114,7 +114,7 @@ DESIGN.md §12.
       native folder picker, elevated launch; measure start time and size
 - [x] Packaging: tool to embed the manifest, icon and version information
       (new build-time dependency), size of the final download
-- [ ] Self-removal on uninstall and replacing a running executable on update
+- [x] Self-removal on uninstall and replacing a running executable on update
 - [ ] Identifying the interactive user's known folders from an elevated
       process
 - [ ] Interface language (English only, or English and Italian)
