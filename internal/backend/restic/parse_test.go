@@ -116,7 +116,7 @@ func TestParseSnapshots(t *testing.T) {
 	if !snaps[0].Time.Before(snaps[1].Time) {
 		t.Error("snapshots not sorted oldest first")
 	}
-	if snaps[0].Files != 3 || snaps[0].Bytes != 300013 {
+	if snaps[0].Files != 3 || snaps[0].Bytes != 300013 || snaps[0].AddedPacked != 307248 {
 		t.Errorf("size from summary: %d files, %d bytes", snaps[0].Files, snaps[0].Bytes)
 	}
 	for _, s := range snaps {

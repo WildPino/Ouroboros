@@ -94,6 +94,10 @@ type Snapshot struct {
 	// restic 0.17 and later; zero for older snapshots.
 	Files uint64
 	Bytes uint64
+	// AddedPacked is the new data the backup stored, after compression;
+	// the snapshot holds at least that much space while no later snapshot
+	// shares it.
+	AddedPacked uint64
 }
 
 // Job returns the name of the job the snapshot belongs to, or "" if it

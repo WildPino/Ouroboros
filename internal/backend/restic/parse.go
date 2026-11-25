@@ -88,8 +88,9 @@ type snapshotJSON struct {
 	Paths    []string  `json:"paths"`
 	Tags     []string  `json:"tags"`
 	Summary  *struct {
-		Files uint64 `json:"total_files_processed"`
-		Bytes uint64 `json:"total_bytes_processed"`
+		Files       uint64 `json:"total_files_processed"`
+		Bytes       uint64 `json:"total_bytes_processed"`
+		AddedPacked uint64 `json:"data_added_packed"`
 	} `json:"summary"`
 }
 
@@ -110,7 +111,7 @@ func parseSnapshots(data []byte) ([]backend.Snapshot, error) {
 			Hostname: s.Hostname, Paths: s.Paths, Tags: s.Tags,
 		}
 		if s.Summary != nil {
-			sn.Files, sn.Bytes = s.Summary.Files, s.Summary.Bytes
+			sn.Files, sn.Bytes, sn.AddedPacked = s.Summary.Files, s.Summary.Bytes, s.Summary.AddedPacked
 		}
 		out = append(out, sn)
 	}
