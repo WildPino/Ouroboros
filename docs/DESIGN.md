@@ -76,8 +76,8 @@ i.e. actual growth on disk).
 - Repository created with format version 2 (compression support).
 - Backup flags: `--compression <config>`, `--use-fs-snapshot` when `vss = true`,
   `--tag ouroboros --tag job:<name>`, `--host <hostname>`,
-  `--exclude` / `--exclude-file`, `--read-concurrency` and `--pack-size` from
-  the memory profile.
+  `--iexclude` / `--iexclude-file` (case-insensitive, like Windows paths),
+  `--read-concurrency` and `--pack-size` from the memory profile.
 - Snapshots are attributed to jobs exclusively through the `job:<name>` tag.
 - Pinned snapshots carry the tag `ouroboros:pinned`.
 - Never use `--no-lock`. Never touch files inside the repository directly.
@@ -281,6 +281,10 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
   Administrators so that a normal user cannot change what SYSTEM executes.
 - `restic_path` in config must be an absolute path to a file writable only by
   Administrators; `doctor` warns otherwise.
+- With `restic_path` empty, the task finds restic on the machine PATH, not on
+  the PATH of the user who runs `install`. `install` refuses, and `doctor`
+  fails, when restic is not on the machine PATH, and name the path to set in
+  `restic_path`.
 
 `init`:
 

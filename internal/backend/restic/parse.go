@@ -152,3 +152,19 @@ func truncate(b []byte) string {
 	}
 	return string(b)
 }
+
+// restoreTotalFiles returns the number of files that "restic restore --json"
+// selected, from its summary line; 0 when the summary has none.
+func restoreTotalFiles(stdout []byte) uint64 {
+	var total uint64
+	for line := range bytes.Lines(stdout) {
+		var s struct {
+			MessageType string `json:"message_type"`
+			TotalFiles  uint64 `json:"total_files"`
+		}
+		if json.Unmarshal(bytes.TrimSpace(line), &s) == nil && s.MessageType == "summary" {
+			total = s.TotalFiles
+		}
+	}
+	return total
+}

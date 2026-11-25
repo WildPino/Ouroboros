@@ -61,6 +61,7 @@ type installCase struct {
 	errOut  *bytes.Buffer
 	cfgPath string
 	exe     string
+	progDir string
 	tasks   *fakeTasks
 	deps    installDeps
 
@@ -83,13 +84,18 @@ func newInstallCase(t *testing.T) *installCase {
 	if err := os.WriteFile(filepath.Join(cfgDir, secret.FileName), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// restic installed for all users: on the machine PATH.
+	if err := os.WriteFile(filepath.Join(progDir, "restic.exe"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	c := &installCase{out: &bytes.Buffer{}, errOut: &bytes.Buffer{}, cfgPath: cfgPath,
-		exe: filepath.Join(progDir, "ouroboros.exe"), tasks: &fakeTasks{}}
+		exe: filepath.Join(progDir, "ouroboros.exe"), progDir: progDir, tasks: &fakeTasks{}}
 	c.opts = &options{configPath: cfgPath, stdout: c.out, stderr: c.errOut}
 	c.deps = installDeps{
 		isElevated:       func() (bool, error) { return true, nil },
 		executable:       func() (string, error) { return c.exe, nil },
 		findRestic:       func(string) (string, error) { return filepath.Join(progDir, "restic.exe"), nil },
+		systemPath:       func() (string, error) { return filepath.Join(root, "missing") + ";" + progDir, nil },
 		untrustedWriters: func(string) ([]string, error) { return nil, nil },
 		tasks:            c.tasks,
 		now:              func() time.Time { return time.Date(2026, 5, 1, 10, 7, 33, 0, time.Local) },
@@ -204,6 +210,31 @@ func TestInstallRefusals(t *testing.T) {
 				t.Fatal("task created")
 			}
 		})
+	}
+}
+
+func TestInstallNeedsResticForSystem(t *testing.T) {
+	c := newInstallCase(t)
+	userDir := filepath.Join(filepath.Dir(c.progDir), "user", "WinGet", "Links")
+	userRestic := filepath.Join(userDir, "restic.exe")
+	c.deps.findRestic = func(string) (string, error) { return userRestic, nil }
+	c.deps.systemPath = func() (string, error) { return filepath.Join(filepath.Dir(c.progDir), "system32"), nil }
+	err := runInstall(context.Background(), c.opts, c.deps)
+	if err == nil || !strings.Contains(err.Error(), "restic_path = '"+userRestic+"'") || !strings.Contains(err.Error(), "SYSTEM") {
+		t.Fatalf("got %v", err)
+	}
+	if len(c.tasks.created) != 0 {
+		t.Fatal("task created although SYSTEM cannot find restic")
+	}
+
+	// An explicit restic_path is what the task runs; the PATH is not used.
+	cfg := strings.Replace(testConfig, "[repository]\n", "[repository]\nrestic_path = '"+userRestic+"'\n", 1)
+	if err := os.WriteFile(c.cfgPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.deps.systemPath = func() (string, error) { t.Fatal("system PATH read with restic_path set"); return "", nil }
+	if err := runInstall(context.Background(), c.opts, c.deps); err != nil {
+		t.Fatalf("with restic_path: %v", err)
 	}
 }
 

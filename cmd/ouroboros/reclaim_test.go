@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -68,5 +71,24 @@ func TestWritePlan(t *testing.T) {
 	writePlan(&out, plan, targets)
 	if !strings.Contains(out.String(), "all of them are protected") {
 		t.Errorf("all protected:\n%s", out.String())
+	}
+}
+
+func TestReclaimPlanCommand(t *testing.T) {
+	c := newRepoCase(t)
+	if err := os.MkdirAll(filepath.Join(c.dir, "repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := runReclaimPlan(context.Background(), c.opts, c.deps); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.out.String(), "free") || c.locked != 0 {
+		t.Errorf("locked %d, output:\n%s", c.locked, c.out)
+	}
+
+	c.deps.isElevated = func() (bool, error) { return false, nil }
+	err := runReclaimPlan(context.Background(), c.opts, c.deps)
+	if err == nil || !strings.Contains(err.Error(), "Administrator") {
+		t.Fatalf("not elevated: %v", err)
 	}
 }

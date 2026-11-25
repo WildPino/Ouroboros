@@ -90,7 +90,11 @@ function Invoke-ReleaseSnapshot {
     } finally {
         Remove-Item Env:GOOS, Env:GOARCH -ErrorAction SilentlyContinue
     }
-    Copy-Item -LiteralPath 'ouroboros.example.toml', 'LICENSE', 'README.md' -Destination $stage
+    Copy-Item -LiteralPath 'ouroboros.example.toml', 'LICENSE', 'README.md', 'CHANGELOG.md' -Destination $stage
+    # The restore guide must be at hand when the machine that made the
+    # backups is not.
+    New-Item -ItemType Directory -Force -Path (Join-Path $stage 'docs') | Out-Null
+    Copy-Item -LiteralPath 'docs/RESTORE.md' -Destination (Join-Path $stage 'docs')
 
     $zip = Join-Path 'dist' "$name.zip"
     if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }

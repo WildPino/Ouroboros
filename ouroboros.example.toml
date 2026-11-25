@@ -60,6 +60,7 @@ event_log = true
 [[job]]
 name = "documents"
 paths = ['C:\Users\me\Documents', 'D:\Projects']
+# restic patterns; letter case does not matter
 exclude = ['**\node_modules', '**\.cache', '**\*.tmp']
 exclude_file = ''                # optional file with one pattern per line
 interval = "6h"

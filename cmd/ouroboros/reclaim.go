@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,32 +26,31 @@ func newReclaimCmd(opts *options) *cobra.Command {
 			if !dryRun {
 				return errors.New("reclaim only supports --dry-run; space is reclaimed automatically before each backup")
 			}
-			cfg, err := config.Load(opts.configPath)
-			if err != nil {
-				return err
-			}
-			b, err := newResticBackend(cfg, opts.configPath)
-			if err != nil {
-				return err
-			}
-			host, err := os.Hostname()
-			if err != nil {
-				return err
-			}
-			r, err := newReclaimer(cfg, b, host)
-			if err != nil {
-				return err
-			}
-			plan, err := r.Plan(cmd.Context(), 0)
-			if err != nil {
-				return err
-			}
-			writePlan(opts.stdout, plan, r.Targets)
-			return nil
+			return runReclaimPlan(cmd.Context(), opts, defaultRepoDeps())
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "only show what would be deleted")
 	return cmd
+}
+
+// runReclaimPlan prints what a reclaim would delete now. Planning only
+// reads, so it takes no lock and also works during a run.
+func runReclaimPlan(ctx context.Context, opts *options, d repoDeps) error {
+	s, err := openRepo(ctx, opts, d, "reclaim", false)
+	if err != nil {
+		return err
+	}
+	defer s.release()
+	r, err := newReclaimer(s.cfg, s.backend, s.host)
+	if err != nil {
+		return err
+	}
+	plan, err := r.Plan(ctx, 0)
+	if err != nil {
+		return err
+	}
+	writePlan(opts.stdout, plan, r.Targets)
+	return nil
 }
 
 // newReclaimer wires the space manager to the real disk for cfg. host must

@@ -15,7 +15,8 @@ Integration tests run the real `restic` (0.17 or later, found on `PATH`)
 against repositories in temporary directories, and are skipped when restic is
 not installed. They cover, among others:
 
-- backup, snapshots, forget, prune, check, restore and tag;
+- backup, snapshots, forget, prune, check, restore (also of parts selected
+  by Windows paths) and tag;
 - restic killed in the middle of backups and prunes, as a crash or a power
   loss would: the repository must still pass a full `check --read-data`, and
   the stale lock left behind must not block later operations;

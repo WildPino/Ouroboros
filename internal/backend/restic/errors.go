@@ -16,6 +16,8 @@ var (
 	ErrIncomplete  = errors.New("some source files could not be read")
 	ErrInterrupted = errors.New("restic was interrupted")
 	ErrTimeout     = errors.New("restic timed out")
+	// ErrNothingMatched is a restore whose include patterns matched no file.
+	ErrNothingMatched = errors.New("nothing in the snapshot matches")
 )
 
 // restic exit codes (restic 0.17+).
