@@ -53,3 +53,23 @@ func Acquire(name string) (*Lock, error) {
 	}
 	return &Lock{release: release, done: done}, nil
 }
+
+// Held reports whether some process holds the named mutex, without taking
+// it: a probe that acquired the mutex, even briefly, could make a scheduled
+// run starting at that moment skip its work. A named mutex exists only while
+// a handle to it is open, and holders keep theirs open for the whole run.
+func Held(name string) (bool, error) {
+	n, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		return false, err
+	}
+	h, err := windows.OpenMutex(windows.SYNCHRONIZE, false, n)
+	if err == windows.ERROR_FILE_NOT_FOUND {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("open mutex %s: %w", name, err)
+	}
+	windows.CloseHandle(h)
+	return true, nil
+}

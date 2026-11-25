@@ -75,3 +75,25 @@ func TestReleaseNil(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestHeld(t *testing.T) {
+	name := testName(t)
+	if held, err := Held(name); err != nil || held {
+		t.Fatalf("before Acquire: held=%v err=%v", held, err)
+	}
+	l, err := Acquire(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held, err := Held(name); err != nil || !held {
+		t.Fatalf("while held: held=%v err=%v", held, err)
+	}
+	// The probe must not have taken the mutex.
+	if _, err := Acquire(name); !errors.Is(err, ErrLocked) {
+		t.Fatalf("Acquire after probe: %v, want ErrLocked", err)
+	}
+	l.Release()
+	if held, err := Held(name); err != nil || held {
+		t.Fatalf("after Release: held=%v err=%v", held, err)
+	}
+}
