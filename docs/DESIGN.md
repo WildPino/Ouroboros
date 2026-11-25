@@ -297,6 +297,12 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
 | `auto` (default) | based on CPU count and free RAM | 32 MiB | |
 | `high` | min(16, CPUs) | 64 MiB | large-RAM machines, fast disks |
 
+`auto` reads with half the CPUs, between 2 and 8, and 32 MiB packs. restic
+keeps about two packs per reader in memory, so readers are lowered, and then
+the pack size to 16 MiB, until that stays within a quarter of the free RAM.
+Below 1 GB of free RAM `auto` behaves like `low`. If the free RAM cannot be
+read, it is not taken into account.
+
 Explicit `read_concurrency` / `pack_size_mb` override the profile. Gains are
 mostly for many small files and NVMe sources; compression ratio is not
 affected.
