@@ -400,8 +400,9 @@ Invariants that must hold in every test:
 The goal is a program a non-technical user can download and use without a
 terminal, a text editor or a separate restic installation.
 
-Status: draft. The open questions in §12.8 are settled in ROADMAP phase M8.0,
-before any code for the window is written.
+Status: approved by the owner at the end of ROADMAP phase M8.0. The
+questions in §12.8 are settled; changes follow the usual rule of an owner's
+approval in the same commit.
 
 ### 12.1 What the user sees
 
@@ -583,7 +584,7 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 - The window itself, the UAC prompt and the real installation are checked by
   hand, with a procedure in `docs/TESTING.md`.
 
-### 12.8 Open questions
+### 12.8 Settled questions
 
 1. Distribution. Settled:
    - SmartScreen keys reputation to each file hash for unsigned files, so

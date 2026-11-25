@@ -125,7 +125,7 @@ DESIGN.md §12.
 - [x] Deleting a removed job's snapshots: allowed or not, and under which
       protections (the agent rules allow deletions only through the planner
       with the §3.5 protections)
-- [ ] Owner sign-off on DESIGN.md §12 before M8.1
+- [x] Owner sign-off on DESIGN.md §12 before M8.1
 
 Done when: DESIGN.md §12 has no open question left and the owner approved it.
 
