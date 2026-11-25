@@ -110,7 +110,7 @@ DESIGN.md §12.
       data folder for an elevated process, disabling developer tools,
       context menu, navigation and remote content; behaviour when the
       runtime is missing
-- [ ] Prototype window in a scratch module: one page, one bound function,
+- [x] Prototype window in a scratch module: one page, one bound function,
       native folder picker, elevated launch; measure start time and size
 - [ ] Packaging: tool to embed the manifest, icon and version information
       (new build-time dependency), size of the final download

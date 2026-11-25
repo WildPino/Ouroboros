@@ -526,11 +526,31 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 ### 12.6 Technology
 
 - Window: WebView2 through `github.com/jchv/go-webview2` (pure Go, no cgo),
-  pinned to a commit. The library lacks some of what §12.3 needs: it does
-  not expose `NavigationStarting`, it grants the page clipboard read access,
-  and it ends the process with `log.Fatal` on some errors. Whether these are
-  handled around it or in a small fork kept in the repository is decided
-  with the prototype (question 3).
+  kept as a small modified copy in `third_party/go-webview2` with its MIT
+  license and a note of the upstream commit and of each change. The library
+  lacks what §12.3 needs, and the prototype showed it cannot be added from
+  outside: without a `NewWindowRequested` handler `window.open` creates a
+  second, unfiltered window. The copy adds:
+  - `NavigationStarting` and `FrameNavigationStarting` handlers that cancel
+    any navigation outside the fixed origin;
+  - a `NewWindowRequested` handler that marks every popup handled without
+    opening one;
+  - a check of each web message's source document, dropping messages from
+    any other origin;
+  - every browser permission denied (upstream grants clipboard read);
+  - errors returned instead of `log.Fatal`.
+- Embedded assets are served from `https://app.ouroboros.invalid/` through a
+  `WebResourceRequested` filter on every request; anything else gets 403.
+  Each response carries `Content-Security-Policy: default-src 'self';
+  frame-ancestors 'none'`, which also blocks inline scripts, so the page keeps
+  its script in separate files.
+- Calls that show a native dialog run from the window's message loop
+  (`Dispatch`), not inside the WebView2 event that received the call, and
+  report their result to the page afterwards.
+- Measured on the prototype (Windows 11): the page is ready 2.0 s after start
+  the first time and about 1.5 s after that, elevated or not; the window
+  executable is 3.3 MB; the user data folder grows to about 5 MB. The folder
+  picker works elevated, for other drives and for the user's own folders.
 - WebView2 user data folder: `%LOCALAPPDATA%\Ouroboros\WebView2` of the
   account that approved the elevation, never next to the executable in
   Program Files.
@@ -573,8 +593,10 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      `restic.exe` is acceptable is asked to SignPath first; if not, setup
      downloads the official restic release and checks its SHA-256 instead of
      embedding it.
-   - Whether embedding executables and requiring elevation raises antivirus
-     detections is measured on the prototype (question 3).
+   - A local Microsoft Defender scan found nothing in the prototype window nor
+     in a build embedding `restic.exe` (40 MB, 14 MB zipped). A local scan
+     does not reproduce a downloaded file's treatment, so the first published
+     build is checked again after download.
 2. WebView2. Settled: the window stays elevated, with the mitigations of
    §12.3 recorded as a deliberate deviation from Microsoft's guidance; user
    data folder, runtime detection and library gaps in §12.6. Not verified:
