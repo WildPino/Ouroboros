@@ -112,6 +112,8 @@ const (
 	KindRetention = "retention"
 	KindPrune     = "prune"
 	KindCheck     = "check"
+	// KindJobDeletion is the deletion of a removed job's backups on request.
+	KindJobDeletion = "job_deletion"
 )
 
 // Record is one line of history.jsonl.
