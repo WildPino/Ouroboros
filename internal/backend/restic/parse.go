@@ -68,6 +68,10 @@ type snapshotJSON struct {
 	Hostname string    `json:"hostname"`
 	Paths    []string  `json:"paths"`
 	Tags     []string  `json:"tags"`
+	Summary  *struct {
+		Files uint64 `json:"total_files_processed"`
+		Bytes uint64 `json:"total_bytes_processed"`
+	} `json:"summary"`
 }
 
 // parseSnapshots decodes "restic snapshots --json" and returns the snapshots
@@ -82,10 +86,14 @@ func parseSnapshots(data []byte) ([]backend.Snapshot, error) {
 		if s.ID == "" {
 			return nil, fmt.Errorf("parse snapshots: entry without id")
 		}
-		out = append(out, backend.Snapshot{
+		sn := backend.Snapshot{
 			ID: s.ID, ShortID: s.ShortID, Time: s.Time,
 			Hostname: s.Hostname, Paths: s.Paths, Tags: s.Tags,
-		})
+		}
+		if s.Summary != nil {
+			sn.Files, sn.Bytes = s.Summary.Files, s.Summary.Bytes
+		}
+		out = append(out, sn)
 	}
 	slices.SortStableFunc(out, func(a, b backend.Snapshot) int {
 		if c := a.Time.Compare(b.Time); c != 0 {

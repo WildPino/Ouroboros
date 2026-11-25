@@ -71,6 +71,10 @@ type Snapshot struct {
 	Hostname string
 	Paths    []string
 	Tags     []string
+	// Files and Bytes are the size of the backed-up data as recorded by
+	// restic 0.17 and later; zero for older snapshots.
+	Files uint64
+	Bytes uint64
 }
 
 // Job returns the name of the job the snapshot belongs to, or "" if it
