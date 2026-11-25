@@ -131,7 +131,15 @@ func runInstall(ctx context.Context, opts *options, d installDeps) error {
 	}
 	// "go run" and similar leave the binary in a temporary directory that
 	// disappears; the task would then fail on every tick.
-	if tmp, err := filepath.EvalSymlinks(d.tempDir()); err == nil && config.IsWithin(exe, tmp) {
+	// Compare with the temporary directory as given and resolved: either
+	// path may use short 8.3 names (C:\Users\RUNNER~1) and only paths that
+	// exist can be resolved.
+	tmp := d.tempDir()
+	inTemp := config.IsWithin(exe, tmp)
+	if resolved, err := filepath.EvalSymlinks(tmp); err == nil && config.IsWithin(exe, resolved) {
+		inTemp = true
+	}
+	if inTemp {
 		return fmt.Errorf("%s is in a temporary directory: copy ouroboros.exe to a permanent location first", exe)
 	}
 	resticExe, err := d.findRestic(cfg.Repository.ResticPath)
