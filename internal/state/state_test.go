@@ -109,3 +109,29 @@ func TestHistory(t *testing.T) {
 		t.Fatalf("after append: %d records, %d skipped, %v", len(recs), skipped, err)
 	}
 }
+
+func TestProgressFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ProgressFile)
+	if _, ok, err := LoadProgress(path); ok || err != nil {
+		t.Fatalf("missing file: ok=%v err=%v", ok, err)
+	}
+	t0 := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+	want := Progress{Started: t0, Updated: t0.Add(time.Minute), Phase: "backup", PhaseStarted: t0, Job: "docs",
+		Backup: &BackupProgress{PercentDone: 0.25, FilesDone: 3, TotalFiles: 12, BytesDone: 1 << 20, TotalBytes: 4 << 20}}
+	if err := SaveProgress(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := LoadProgress(path)
+	if err != nil || !ok || got.Job != "docs" || !got.Updated.Equal(want.Updated) || *got.Backup != *want.Backup {
+		t.Fatalf("got %+v ok=%v err=%v", got, ok, err)
+	}
+	if err := RemoveProgress(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveProgress(path); err != nil {
+		t.Fatalf("second remove: %v", err)
+	}
+	if _, ok, _ := LoadProgress(path); ok {
+		t.Fatal("file still there")
+	}
+}

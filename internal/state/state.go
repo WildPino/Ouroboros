@@ -14,8 +14,9 @@ import (
 
 // File names inside the configuration directory (DESIGN.md §5).
 const (
-	StateFile   = "state.json"
-	HistoryFile = "history.jsonl"
+	StateFile    = "state.json"
+	HistoryFile  = "history.jsonl"
+	ProgressFile = "progress.json"
 )
 
 // JobState is the scheduling state of one job.
@@ -64,6 +65,12 @@ func Save(path string, st State) error {
 	if err != nil {
 		return err
 	}
+	return writeAtomic(path, data, true)
+}
+
+// writeAtomic replaces path with data through a temporary file and a
+// rename; sync also flushes the data to disk before the rename.
+func writeAtomic(path string, data []byte, sync bool) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -83,8 +90,10 @@ func Save(path string, st State) error {
 	if _, err := tmp.Write(append(data, '\n')); err != nil {
 		return err
 	}
-	if err := tmp.Sync(); err != nil {
-		return err
+	if sync {
+		if err := tmp.Sync(); err != nil {
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
