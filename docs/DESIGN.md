@@ -532,9 +532,26 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 
 ### 12.8 Open questions
 
-1. Distribution: an unsigned download triggers SmartScreen, and an
-   executable that embeds executables and asks for elevation may trigger
-   antivirus heuristics. Is code signing needed, or separate files?
+1. Distribution. Settled:
+   - SmartScreen keys reputation to each file hash for unsigned files, so
+     every new unsigned release starts with the "Windows protected your PC"
+     warning, which the user can pass with "More info, Run anyway". Smart
+     App Control, when enabled on Windows 11, blocks unsigned files without
+     reputation and offers no way past. Signing lets reputation carry over
+     between versions; EV certificates no longer skip the warning.
+   - 0.2.0 ships unsigned. The README shows the SmartScreen warning and how
+     to pass it, and says that Smart App Control blocks the program.
+   - `Ouroboros.exe` and `ouroboros.exe` carry a manifest and version
+     information; each release is submitted to Microsoft's false-positive
+     portal.
+   - In parallel the owner applies to SignPath Foundation for free signing
+     of open source releases (the publisher then shows as "SignPath
+     Foundation"). Whether an executable embedding the unsigned official
+     `restic.exe` is acceptable is asked to SignPath first; if not, setup
+     downloads the official restic release and checks its SHA-256 instead of
+     embedding it.
+   - Whether embedding executables and requiring elevation raises antivirus
+     detections is measured on the prototype (question 3).
 2. WebView2: where its user data folder goes for an elevated process (by
    default it is created next to the executable, in Program Files); how
    developer tools, the context menu, navigation and remote content are
