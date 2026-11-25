@@ -10,8 +10,8 @@ removed automatically, never the newest ones.
 Like the serpent eating its own tail, the backup history consumes its oldest
 part to make room for the new.
 
-> **Status:** pre-alpha, under active development. Do not rely on it as your
-> only backup yet.
+> **Status:** 0.1.0, the first release. Run it alongside your existing backup
+> until it has proven itself on your machine.
 
 ---
 
@@ -77,32 +77,48 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full design.
 ## Requirements
 
 - Windows 10 or 11 (x64)
-- [restic](https://restic.net) 0.17 or later on `PATH` (or path set in config)
+- [restic](https://restic.net) 0.17 or later, on the system `PATH` or set
+  with `restic_path` in the configuration (the scheduled task runs as
+  `SYSTEM` and does not see a `PATH` set for one user)
 - Administrator rights (needed for VSS and for the scheduled task)
 - A dedicated partition or drive for the repository (NTFS or ReFS)
 
 ## Quick start
 
+Download the zip of the latest release, check it against `checksums.txt`
+(`Get-FileHash ouroboros_*.zip`), and extract `ouroboros.exe` into a folder
+that only administrators can change, such as `C:\Program Files\Ouroboros`. The
+scheduled task runs it as `SYSTEM`, so `install` refuses an executable in a
+temporary folder and warns when other users could replace it.
+
+In an Administrator PowerShell:
+
 ```powershell
-# 1. Install restic
-winget install restic.restic
+# 1. Install restic for all users, so that the scheduled task finds it
+winget install restic.restic --scope machine
 
 # 2. Create a config from the example and edit it
-ouroboros config init > C:\ProgramData\Ouroboros\ouroboros.toml
+New-Item -ItemType Directory -Force C:\ProgramData\Ouroboros
+& 'C:\Program Files\Ouroboros\ouroboros.exe' config init > C:\ProgramData\Ouroboros\ouroboros.toml
 notepad C:\ProgramData\Ouroboros\ouroboros.toml
 
 # 3. Check the environment
-ouroboros doctor
+& 'C:\Program Files\Ouroboros\ouroboros.exe' doctor
 
 # 4. Create the repository (asks for a password, stores it encrypted for this machine)
-ouroboros init
+& 'C:\Program Files\Ouroboros\ouroboros.exe' init
 
 # 5. First backup, interactive
-ouroboros run --force
+& 'C:\Program Files\Ouroboros\ouroboros.exe' run --force
 
 # 6. Install the scheduled task
-ouroboros install
+& 'C:\Program Files\Ouroboros\ouroboros.exe' install
 ```
+
+The examples below write just `ouroboros`; add the folder to `PATH` to do the
+same. Instead of installing restic for all users, you can put `restic.exe` in a
+folder only administrators can change and set `restic_path` in the
+configuration; `doctor` tells whether the scheduled task will find restic.
 
 **Write down the repository password and keep it somewhere else.** Without it
 the backups cannot be decrypted, by Ouroboros or by anyone.
@@ -134,10 +150,10 @@ vss = true
 | Command | Description |
 |---|---|
 | `ouroboros init` | Create the repository and store its password |
-| `ouroboros run [--job NAME] [--force]` | Run due jobs (or the named job immediately) |
+| `ouroboros run [--job NAME] [--force]` | Run the due jobs, or only the named one; `--force` runs them even if not due |
 | `ouroboros status` | Jobs, last results, space usage, history depth |
 | `ouroboros snapshots [--job NAME]` | List snapshots |
-| `ouroboros restore SNAPSHOT --target DIR [--include PATTERN] [--overwrite]` | Restore files (into an empty folder unless `--overwrite`) |
+| `ouroboros restore SNAPSHOT --target DIR [--include PATH] [--overwrite]` | Restore files (into an empty folder unless `--overwrite`) |
 | `ouroboros reclaim --dry-run` | Show what would be deleted to reach the target free space |
 | `ouroboros pin SNAPSHOT` / `unpin` | Protect a snapshot from automatic deletion |
 | `ouroboros check [--read-data PERCENT]` | Verify repository integrity |
@@ -145,12 +161,19 @@ vss = true
 | `ouroboros doctor` | Check restic version, permissions, VSS, config, free space |
 | `ouroboros config init` / `validate` | Print an example config / validate the current one |
 
-`snapshots`, `restore`, `pin`, `unpin`, `check`, `run` and `init` need an
-Administrator console, because only administrators can read the stored password.
-`pin`, `unpin` and `check` refuse to run while a backup is in progress.
+All commands except `doctor`, `config` and `version` need an Administrator
+console: only administrators can read the stored password, and VSS and the
+scheduled task need the rights too. Without them, `status` shows only what it
+can read. `pin`, `unpin` and `check` refuse to run while a backup is in
+progress.
 
-Logs are written to `%ProgramData%\Ouroboros\logs\`; warnings and errors also
-go to the Windows Event Log (Application, source `Ouroboros`).
+`--config PATH` selects another configuration; the default is
+`%ProgramData%\Ouroboros\ouroboros.toml`. The stored password, the state and
+the logs live in the same folder. Logs are in its `logs` subfolder; warnings
+and errors also go to the Windows Event Log (Application, source `Ouroboros`).
+
+Restoring, with Ouroboros or with plain restic, is described in
+[docs/RESTORE.md](docs/RESTORE.md).
 
 Exit codes: `0` success, `1` error, `2` configuration error, `3` completed with
 warnings, `4` a backup was skipped because not enough space could be freed.
