@@ -115,7 +115,7 @@ DESIGN.md §12.
 - [x] Packaging: tool to embed the manifest, icon and version information
       (new build-time dependency), size of the final download
 - [x] Self-removal on uninstall and replacing a running executable on update
-- [ ] Identifying the interactive user's known folders from an elevated
+- [x] Identifying the interactive user's known folders from an elevated
       process
 - [ ] Interface language (English only, or English and Italian)
 - [ ] Bridge contract: the list of calls the page can make, their arguments,
@@ -192,6 +192,8 @@ contract.
 ### M8.5 — First setup
 
 - [ ] Three steps: backup drive and folder, folders to back up, password
+- [ ] Owner's manual test includes a standard user approving the prompt
+      with an administrator account: suggested folders are the user's
 - [ ] Runs install (M8.3), writes the configuration, `init`, task, first
       backup with progress
 

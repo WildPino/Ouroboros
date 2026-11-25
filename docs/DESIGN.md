@@ -552,7 +552,7 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
   executable is 3.3 MB; the user data folder grows to about 5 MB. The folder
   picker works elevated, for other drives and for the user's own folders.
 - WebView2 user data folder: `%LOCALAPPDATA%\Ouroboros\WebView2` of the
-  account that approved the elevation, never next to the executable in
+  account the window runs as, never next to the executable in
   Program Files.
 - Runtime: part of Windows 11, and installed on almost all Windows 10
   machines by Microsoft. If it is missing, the window cannot be created and
@@ -635,7 +635,18 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      `Ouroboros.exe` and the then empty program folder for deletion at the
      next restart, and says so. No helper copy is started from a temporary
      folder.
-5. The interactive user's known folders from an elevated process (§12.3).
+5. The interactive user's known folders. Settled: when a standard user
+   approves the UAC prompt with an administrator's credentials, the window
+   runs as that administrator, and its own known folders are the
+   administrator's. The window therefore finds the desktop shell
+   (`GetShellWindow`), opens its process token with query and impersonate
+   rights, and passes it to `SHGetKnownFolderPath` for the profile,
+   Documents, Desktop and Pictures shown as suggested folders; the folder
+   picker starts in that profile. Checked on the prototype for the same
+   account; the different-account case is part of the owner's manual test
+   in M8.5. If the shell is not running, the window falls back to its own
+   folders and says so. The WebView2 user data folder belongs to the
+   account the window runs as (§12.6).
 6. Interface language: English only, or English and Italian.
 7. The bridge contract: every call the page can make, with arguments,
    results and errors.
