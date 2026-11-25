@@ -87,8 +87,9 @@ The working folder must not exist or must be empty. The script:
 
 It fails if an exit code other than 0, 3 or 4 appears (1 is accepted only in
 the round that runs out of space, when the retry fails too), if the free
-space stays below min_free without exit code 4, if the final check fails or
-if no reclaim happened. The output is saved to `test-results\diskfull-test.log`.
+space stays below min_free without exit code 4, if a round takes more than 5
+minutes (a backup stuck on a full disk was not stopped), if the final check
+fails or if no reclaim happened. The output is saved to `test-results\diskfull-test.log`.
 
 If the script is interrupted, detach the disk by hand: open `diskpart`, then
 `select vdisk file="<WorkDir>\disk.vhdx"` and `detach vdisk`.

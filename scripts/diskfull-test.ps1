@@ -189,13 +189,20 @@ vss = false
         }
 
         "---- Round $i/${Iterations}: +$size MB, free before $(Get-FreeMB $mnt) MB"
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
         $out = @(& $exe run --force --config $cfg 2>&1 | ForEach-Object { "$_" })
         $code = $LASTEXITCODE
+        $minutes = [math]::Round($watch.Elapsed.TotalMinutes, 1)
         $out | ForEach-Object { "  $_" }
         $codes[$code] = 1 + [int]$codes[$code]
         $free = Get-FreeMB $mnt
         $snaps = (& $exe snapshots --config $cfg 2>&1 | Select-Object -Last 1)
-        "Round ${i}: exit code $code, free after $free MB, $snaps"
+        "Round ${i}: exit code $code, free after $free MB, $snaps, $minutes min"
+        # A backup stuck on a full disk must be stopped within about a
+        # minute, not left to restic's 15 minutes of retries.
+        if ($minutes -gt 5) {
+            $violations.Add("round ${i}: took $minutes minutes")
+        }
         $fullDiskFailure = $code -eq 1 -and ($out -match 'full disk').Count -gt 0
         if ($code -ne 0 -and $code -ne 3 -and $code -ne 4 -and -not ($i -eq $spike -and $fullDiskFailure)) {
             $violations.Add("round ${i}: unexpected exit code $code")

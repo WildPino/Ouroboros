@@ -75,7 +75,7 @@ behaviour changed.
 ## M6 — Hardening
 
 - [x] Interrupt tests: kill during backup, during prune; repository still passes check
-- [ ] Disk-full end-to-end test on a small VHDX (documented manual procedure in
+- [x] Disk-full end-to-end test on a small VHDX (documented manual procedure in
       `docs/TESTING.md`)
 - [x] Locked-file test with VSS on and off
 - [x] Long paths (> 260 chars) and Unicode file names
