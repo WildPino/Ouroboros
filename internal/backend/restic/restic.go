@@ -118,7 +118,7 @@ func (b *Restic) Version(ctx context.Context) (string, error) {
 
 // Init creates the repository with format version 2 (compression support).
 func (b *Restic) Init(ctx context.Context) error {
-	_, err := b.r.run(ctx, call{
+	_, err := b.run(ctx, call{
 		args:    []string{"init", "--repository-version", "2", "--json"},
 		timeout: b.opts.Timeouts.Short,
 	})
@@ -135,7 +135,7 @@ func (b *Restic) Backup(ctx context.Context, job backend.Job) (backend.BackupRes
 
 	res := backend.BackupResult{Start: time.Now()}
 	gotSummary := false
-	out, err := b.r.run(ctx, call{
+	out, err := b.run(ctx, call{
 		args:    args,
 		timeout: b.opts.Timeouts.Backup,
 		onLine: func(line []byte) error {
@@ -202,7 +202,7 @@ func (b *Restic) EstimateBackup(ctx context.Context, job backend.Job) (uint64, e
 	}
 	var res backend.BackupResult
 	gotSummary := false
-	_, err = b.r.run(ctx, call{
+	_, err = b.run(ctx, call{
 		args:    args,
 		timeout: b.opts.Timeouts.Backup,
 		onLine: func(line []byte) error {
@@ -235,7 +235,7 @@ func (b *Restic) Snapshots(ctx context.Context, filter backend.SnapshotFilter) (
 		// One --tag with a comma-separated list means "all of these".
 		args = append(args, "--tag", strings.Join(filter.Tags, ","))
 	}
-	out, err := b.r.run(ctx, call{args: args, timeout: b.opts.Timeouts.Short})
+	out, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Short})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (b *Restic) Forget(ctx context.Context, ids []string) error {
 	if err := checkIDs(ids...); err != nil {
 		return err
 	}
-	_, err := b.r.run(ctx, call{
+	_, err := b.run(ctx, call{
 		args:    append([]string{"forget", "--"}, ids...),
 		timeout: b.opts.Timeouts.Short,
 	})
@@ -265,7 +265,7 @@ func (b *Restic) Prune(ctx context.Context, opts backend.PruneOptions) (backend.
 		args = append(args, "--max-unused", opts.MaxUnused)
 	}
 	start := time.Now()
-	_, err := b.r.run(ctx, call{args: args, timeout: b.opts.Timeouts.Prune})
+	_, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Prune})
 	return backend.PruneResult{Duration: time.Since(start)}, err
 }
 
@@ -275,7 +275,7 @@ func (b *Restic) Check(ctx context.Context, opts backend.CheckOptions) error {
 	if opts.ReadDataSubset != "" {
 		args = append(args, "--read-data-subset", opts.ReadDataSubset)
 	}
-	_, err := b.r.run(ctx, call{args: args, timeout: b.opts.Timeouts.Check})
+	_, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Check})
 	return err
 }
 
@@ -292,7 +292,7 @@ func (b *Restic) Restore(ctx context.Context, opts backend.RestoreOptions) error
 		args = append(args, "--include", inc)
 	}
 	args = append(args, "--", opts.SnapshotID)
-	_, err := b.r.run(ctx, call{args: args, timeout: b.opts.Timeouts.Restore})
+	_, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Restore})
 	return err
 }
 
@@ -312,7 +312,7 @@ func (b *Restic) Tag(ctx context.Context, id string, add, remove []string) error
 		args = append(args, "--remove", t)
 	}
 	args = append(args, "--", id)
-	_, err := b.r.run(ctx, call{args: args, timeout: b.opts.Timeouts.Short})
+	_, err := b.run(ctx, call{args: args, timeout: b.opts.Timeouts.Short})
 	return err
 }
 
@@ -327,4 +327,22 @@ func checkIDs(ids ...string) error {
 		}
 	}
 	return nil
+}
+
+// run executes a restic command. When the repository is locked it runs
+// "restic unlock", which removes only stale locks: those of processes that
+// no longer exist on this host, or not refreshed for 30 minutes. A process
+// killed by a crash or a power loss leaves such a lock behind, and restic
+// does not remove it by itself before exclusive operations such as prune
+// and check. The command is retried once; the lock of a live process
+// stays, and the second attempt fails as the first did.
+func (b *Restic) run(ctx context.Context, c call) (output, error) {
+	out, err := b.r.run(ctx, c)
+	if !errors.Is(err, ErrRepoLocked) || c.args[0] == "unlock" || ctx.Err() != nil {
+		return out, err
+	}
+	if _, uerr := b.r.run(ctx, call{args: []string{"unlock"}, timeout: b.opts.Timeouts.Short}); uerr != nil {
+		return out, err
+	}
+	return b.r.run(ctx, c)
 }

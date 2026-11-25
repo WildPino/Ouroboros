@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,8 @@ type world struct {
 	fitsErr      error
 	reclaimErr   map[uint64]error // by growth
 	diskFull     bool
+	free         atomic.Uint64 // read by the full-disk watch, concurrently
+	stuck        int           // backups that hang until stopped, like restic on a full disk
 	recoverErr   error
 	retentionErr error
 	pruneErr     error
@@ -49,6 +52,11 @@ func (w *world) Backup(ctx context.Context, job backend.Job) (backend.BackupResu
 	w.clock.now = w.clock.now.Add(time.Minute)
 	if err := ctx.Err(); err != nil {
 		return backend.BackupResult{}, err
+	}
+	if w.stuck > 0 {
+		w.stuck--
+		<-ctx.Done()
+		return backend.BackupResult{}, errors.New("restic killed")
 	}
 	if len(w.backups) > 0 {
 		f := w.backups[0]
@@ -87,6 +95,8 @@ func (w *world) DiskFull() (bool, error) {
 	w.log("diskfull")
 	return w.diskFull, nil
 }
+
+func (w *world) FreeSpace() (uint64, error) { return w.free.Load(), nil }
 
 func (w *world) RecoverFromFullDisk(ctx context.Context, predicted uint64) (space.Report, error) {
 	w.log("recover %d", predicted/MB)
@@ -262,6 +272,85 @@ func TestRunFullDiskRecoveryFails(t *testing.T) {
 	f.wantCalls("estimate docs", "fits 100", "reclaim 100", "backup docs", "diskfull", "recover 100", "reclaim 0")
 	if !res.CannotReclaim() {
 		t.Fatalf("result %+v", res)
+	}
+}
+
+// watchFast enables the full-disk watch with short timings.
+func (f *fixture) watchFast() {
+	f.runner.StallFree = 64 * MB
+	f.runner.StallTimeout = 30 * time.Millisecond
+	f.runner.WatchInterval = 2 * time.Millisecond
+}
+
+func TestRunStalledBackupIsStoppedAndRecovered(t *testing.T) {
+	f := newFixture(t)
+	f.quiet()
+	f.watchFast()
+	f.runner.Config.Jobs = f.runner.Config.Jobs[:1]
+	f.w.free.Store(5 * MB)
+	f.w.stuck = 1
+	res := f.run(Options{})
+	// The stop itself identifies the full disk: no separate measure.
+	f.wantCalls("estimate docs", "fits 100", "reclaim 100", "backup docs", "recover 100", "backup docs", "reclaim 0")
+	if res.Failed() || f.state().Jobs["docs"].Failed() {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+func TestRunStalledRetryFails(t *testing.T) {
+	f := newFixture(t)
+	f.quiet()
+	f.watchFast()
+	f.runner.Config.Jobs = f.runner.Config.Jobs[:1]
+	f.w.free.Store(0)
+	f.w.stuck = 2
+	res := f.run(Options{})
+	f.wantCalls("estimate docs", "fits 100", "reclaim 100", "backup docs", "recover 100", "backup docs", "reclaim 0")
+	if err := res.Jobs[0].Err; !errors.Is(err, errStalled) || !res.Failed() {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+func TestRunWatchLeavesSlowBackupAlone(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		free func(w *world, stop <-chan struct{})
+	}{
+		{"enough free space", func(w *world, stop <-chan struct{}) { w.free.Store(65 * MB) }},
+		{"free space comes back", func(w *world, stop <-chan struct{}) {
+			// Low for less than the timeout each time.
+			for i := 0; ; i++ {
+				w.free.Store(uint64(i%2) * 100 * MB)
+				select {
+				case <-stop:
+					return
+				case <-time.After(10 * time.Millisecond):
+				}
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			f.quiet()
+			f.watchFast()
+			f.runner.Config.Jobs = f.runner.Config.Jobs[:1]
+			stop := make(chan struct{})
+			done := make(chan struct{})
+			go func() { defer close(done); tc.free(f.w, stop) }()
+			f.w.backups = []func() (backend.BackupResult, error){
+				func() (backend.BackupResult, error) {
+					time.Sleep(200 * time.Millisecond)
+					return backend.BackupResult{SnapshotID: "s"}, nil
+				},
+			}
+			res := f.run(Options{})
+			close(stop)
+			<-done
+			f.wantCalls("estimate docs", "fits 100", "reclaim 100", "backup docs", "reclaim 0")
+			if res.Failed() {
+				t.Fatalf("result %+v", res)
+			}
+		})
 	}
 }
 

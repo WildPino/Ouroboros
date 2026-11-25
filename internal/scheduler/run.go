@@ -33,6 +33,7 @@ type Space interface {
 	CheckFits(growth uint64) error
 	Reclaim(ctx context.Context, growth uint64) (space.Report, error)
 	DiskFull() (bool, error)
+	FreeSpace() (uint64, error)
 	RecoverFromFullDisk(ctx context.Context, predicted uint64) (space.Report, error)
 	RoutinePrune(ctx context.Context, maxUnused string) (space.Report, error)
 }
@@ -49,7 +50,24 @@ type Runner struct {
 	Clock       space.Clock
 	Location    *time.Location // for time-based retention; nil = local time
 	Log         *slog.Logger
+
+	// restic retries failed writes for about 15 minutes before it gives up,
+	// so a backup that fills the disk would sit idle that long. While a
+	// backup runs, free space on the repository partition is polled every
+	// WatchInterval; when it stays below StallFree for StallTimeout, the
+	// backup is stopped and treated as failed on a full disk (DESIGN.md
+	// §3.9). StallFree 0 disables the watch; zero durations use the
+	// defaults.
+	StallFree     uint64
+	StallTimeout  time.Duration
+	WatchInterval time.Duration
 }
+
+// Defaults for the full-disk watch.
+const (
+	DefaultStallTimeout  = time.Minute
+	DefaultWatchInterval = 5 * time.Second
+)
 
 // Options selects what a run does.
 type Options struct {
@@ -288,9 +306,13 @@ func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.
 		return false, fmt.Errorf("make room for the backup: %w", err)
 	}
 
-	res, err := r.Backend.Backup(ctx, bj)
+	res, err := r.watchedBackup(ctx, bj)
 	if err != nil && ctx.Err() == nil {
-		if full, ferr := r.Space.DiskFull(); ferr == nil && full {
+		full := errors.Is(err, errStalled)
+		if !full {
+			full, _ = r.Space.DiskFull()
+		}
+		if full {
 			r.log().Warn("backup failed on a full disk, recovering", "job", job.Name, "err", err)
 			start := r.Clock.Now()
 			rep, rerr := r.Space.RecoverFromFullDisk(ctx, predicted)
@@ -298,7 +320,7 @@ func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.
 			if rerr != nil {
 				return true, fmt.Errorf("backup failed on a full disk: %w; recovery failed: %w", err, rerr)
 			}
-			res, err = r.Backend.Backup(ctx, bj)
+			res, err = r.watchedBackup(ctx, bj)
 		}
 	}
 	if err != nil {
@@ -306,6 +328,70 @@ func (r *Runner) backupJob(ctx context.Context, job config.Job, history []state.
 	}
 	jr.Backup = res
 	return true, nil
+}
+
+// errStalled reports a backup stopped because the repository partition
+// stayed full.
+var errStalled = errors.New("repository partition full, backup stopped")
+
+// watchedBackup runs a backup under the full-disk watch described on Runner.
+func (r *Runner) watchedBackup(ctx context.Context, job backend.Job) (backend.BackupResult, error) {
+	if r.StallFree == 0 {
+		return r.Backend.Backup(ctx, job)
+	}
+	bctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stalled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if r.watchFreeSpace(bctx) {
+			close(stalled)
+			cancel()
+		}
+	}()
+	res, err := r.Backend.Backup(bctx, job)
+	cancel()
+	<-done
+	select {
+	case <-stalled:
+		r.log().Warn("no free space left during the backup, stopping it", "job", job.Name, "free_below", r.StallFree)
+		return backend.BackupResult{}, fmt.Errorf("%w: %w", errStalled, err)
+	default:
+		return res, err
+	}
+}
+
+// watchFreeSpace polls free space until ctx ends and reports whether it
+// stayed below StallFree for StallTimeout. It measures real elapsed time:
+// the run's Clock may be fake.
+func (r *Runner) watchFreeSpace(ctx context.Context) bool {
+	interval, timeout := r.WatchInterval, r.StallTimeout
+	if interval <= 0 {
+		interval = DefaultWatchInterval
+	}
+	if timeout <= 0 {
+		timeout = DefaultStallTimeout
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	var lowSince time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case now := <-t.C:
+			free, err := r.Space.FreeSpace()
+			switch {
+			case err != nil || free >= r.StallFree:
+				lowSince = time.Time{}
+			case lowSince.IsZero():
+				lowSince = now
+			case now.Sub(lowSince) >= timeout:
+				return true
+			}
+		}
+	}
 }
 
 // predict estimates the growth of the next backup of job (DESIGN.md §3.3).

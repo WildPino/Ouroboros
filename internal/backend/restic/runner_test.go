@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/WildPino/ouroboros/internal/backend"
 )
 
 func TestRunnerPassesArguments(t *testing.T) {
@@ -157,5 +161,25 @@ func TestResticEnv(t *testing.T) {
 	want := []string{"PATH=x", "RESTICX=1", "HOME=h"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestStaleLockIsRemovedAndRetried(t *testing.T) {
+	for _, tt := range []struct {
+		mode  string
+		fails bool
+	}{{"locked-once", false}, {"locked-live", true}} {
+		t.Run(tt.mode, func(t *testing.T) {
+			log := filepath.Join(t.TempDir(), "calls")
+			b := &Restic{opts: Options{Timeouts: DefaultTimeouts()}, r: *fakeRunner(t, tt.mode+":"+log)}
+			err := b.Check(context.Background(), backend.CheckOptions{})
+			if tt.fails != (err != nil) || (tt.fails && !errors.Is(err, ErrRepoLocked)) {
+				t.Fatalf("got %v", err)
+			}
+			calls, _ := os.ReadFile(log)
+			if got := strings.Fields(string(calls)); !slices.Equal(got, []string{"check", "unlock", "check"}) {
+				t.Fatalf("calls %v", got)
+			}
+		})
 	}
 }

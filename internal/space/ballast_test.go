@@ -1,8 +1,10 @@
 package space
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -56,5 +58,26 @@ func TestDeleteBallastRefusesDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); err != nil {
 		t.Fatal("directory was removed")
+	}
+}
+
+func TestDirSizeLongUnicodePaths(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "repo Ελληνικά")
+	deep := dir
+	for len(deep) < 320 {
+		deep = filepath.Join(deep, "日本語 𝔸𝔹ℂ "+strings.Repeat("y", 30))
+	}
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deep, "città.bin"), make([]byte, 12345), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "top"), make([]byte, 5), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := DirSize(context.Background(), dir)
+	if err != nil || got != 12350 {
+		t.Fatalf("DirSize = %d, %v", got, err)
 	}
 }

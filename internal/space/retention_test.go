@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/WildPino/ouroboros/internal/backend"
 )
@@ -160,5 +161,53 @@ func TestRoutinePrune(t *testing.T) {
 	}
 	if !slices.Equal(s.prunes, []string{"5%"}) {
 		t.Fatalf("prunes %v", s.prunes)
+	}
+}
+
+// Time-based rules work on local calendar periods. On the night the clocks
+// go back, 02:30 happens twice: one hour of wall-clock time holding two
+// distinct snapshots.
+func TestRetentionKeepAcrossDaylightSaving(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Rome")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Built from UTC: a local time that occurs twice is ambiguous.
+	first := time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC).In(loc) // 02:30 CEST
+	second := first.Add(time.Hour)                                  // 02:30 again, CET
+	if first.Hour() != second.Hour() || first.Equal(second) {
+		t.Fatal("test data")
+	}
+	snaps := []backend.Snapshot{
+		snap("a", "j", first.Add(-time.Hour)),
+		snap("b", "j", first),
+		snap("c", "j", second),
+	}
+	// Both 02:30 snapshots fall in the same local hour: hourly keeps the
+	// newer one and the 01:30 one.
+	if got := keptIDs(RetentionKeep(snaps, KeepRules{Hourly: 5}, loc)); !slices.Equal(got, []string{"a", "c"}) {
+		t.Fatalf("hourly kept %v", got)
+	}
+	// In UTC they are distinct hours.
+	if got := keptIDs(RetentionKeep(snaps, KeepRules{Hourly: 5}, time.UTC)); len(got) != 3 {
+		t.Fatalf("UTC hourly kept %v", got)
+	}
+	if got := keptIDs(RetentionKeep(snaps, KeepRules{Daily: 1}, loc)); !slices.Equal(got, []string{"c"}) {
+		t.Fatalf("daily kept %v", got)
+	}
+}
+
+// Snapshots dated in the future (the clock was set back after they were
+// taken) count as recent and stay protected.
+func TestFutureSnapshotsAreProtected(t *testing.T) {
+	now := t0
+	snaps := []backend.Snapshot{
+		snap("old", "j", now.Add(-10*24*time.Hour)),
+		snap("future1", "j", now.Add(48*time.Hour)),
+		snap("future2", "j", now.Add(72*time.Hour)),
+	}
+	sel := SelectCandidates(snaps, Policy{KeepMin: 1, ProtectNewerThan: 24 * time.Hour}, now)
+	if got := ids(sel.Candidates); !slices.Equal(got, []string{"old"}) {
+		t.Fatalf("candidates %v", got)
 	}
 }

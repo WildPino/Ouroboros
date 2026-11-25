@@ -81,6 +81,13 @@ i.e. actual growth on disk).
 - Snapshots are attributed to jobs exclusively through the `job:<name>` tag.
 - Pinned snapshots carry the tag `ouroboros:pinned`.
 - Never use `--no-lock`. Never touch files inside the repository directly.
+- A restic process killed by a crash or a power loss leaves its lock in the
+  repository, and restic does not remove it by itself before exclusive
+  operations (prune, check). When a command fails because the repository is
+  locked, Ouroboros runs `restic unlock` without `--remove-all`, which removes
+  only stale locks (process gone from this host, or not refreshed for 30
+  minutes), and retries the command once. The lock of a running process is
+  never removed.
 - Exit codes are mapped to typed errors (wrong password, repository locked,
   repository missing, partial backup with unreadable files, fatal).
   restic exit code 3 (some source files unreadable, snapshot still created) is
@@ -208,6 +215,13 @@ A failed backup is treated as out of space when the free space measured right
 after the failure is below `prune_headroom`. Measuring works in every Windows
 language and does not depend on restic's error text.
 
+restic does not fail at once when a write fails: it retries for about 15
+minutes. While a backup runs, Ouroboros measures the free space on the
+repository partition every 5 seconds. If it stays below two packs (twice the
+resolved pack size, §7) for 60 seconds, restic is stopped and the backup is
+treated as failed on a full disk. The lock restic leaves behind is stale and
+is removed before the next operation (§2.2).
+
 If a backup fails because the disk is full:
 
 1. Delete the ballast.
@@ -289,6 +303,12 @@ All writes to `state.json` are atomic (write temp file, flush, rename).
 | `low` | 2 | 16 MiB | small machines |
 | `auto` (default) | based on CPU count and free RAM | 32 MiB | |
 | `high` | min(16, CPUs) | 64 MiB | large-RAM machines, fast disks |
+
+`auto` reads with half the CPUs, between 2 and 8, and 32 MiB packs. restic
+keeps about two packs per reader in memory, so readers are lowered, and then
+the pack size to 16 MiB, until that stays within a quarter of the free RAM.
+Below 1 GB of free RAM `auto` behaves like `low`. If the free RAM cannot be
+read, it is not taken into account.
 
 Explicit `read_concurrency` / `pack_size_mb` override the profile. Gains are
 mostly for many small files and NVMe sources; compression ratio is not

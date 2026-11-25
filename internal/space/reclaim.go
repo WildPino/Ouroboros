@@ -321,6 +321,15 @@ type PlanReport struct {
 	Selection       Selection
 }
 
+// FreeSpace returns the free bytes on the repository partition.
+func (r *Reclaimer) FreeSpace() (uint64, error) {
+	u, err := r.Disk.Usage(r.RepoPath)
+	if err != nil {
+		return 0, err
+	}
+	return u.Free, nil
+}
+
 // DiskFull reports whether a failed backup is explained by a full disk: free
 // space below the prune headroom right after the failure. Measuring works
 // in every Windows language, unlike matching restic's error text.

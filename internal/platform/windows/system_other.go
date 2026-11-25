@@ -38,3 +38,6 @@ func TaskExists(ctx context.Context, name string) (bool, error) { return false, 
 
 // UntrustedWriters is only implemented on Windows.
 func UntrustedWriters(path string) ([]string, error) { return nil, errors.ErrUnsupported }
+
+// FreeMemory is only implemented on Windows.
+func FreeMemory() (uint64, error) { return 0, errors.ErrUnsupported }
