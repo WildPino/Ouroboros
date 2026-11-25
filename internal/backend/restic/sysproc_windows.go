@@ -12,8 +12,10 @@ import (
 	platform "github.com/WildPino/ouroboros/internal/platform/windows"
 )
 
+// sysProcAttr always sets an explicit priority class: without one, a child
+// of a below-normal process, such as the scheduled task, inherits that class.
 func sysProcAttr(priority string) *syscall.SysProcAttr {
-	var class uint32
+	class := uint32(windows.NORMAL_PRIORITY_CLASS)
 	switch priority {
 	case config.PriorityIdle:
 		class = windows.IDLE_PRIORITY_CLASS
