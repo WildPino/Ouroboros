@@ -149,7 +149,7 @@ vss = true
 
 | Command | Description |
 |---|---|
-| `ouroboros init` | Create the repository and store its password |
+| `ouroboros init [--password-stdin]` | Create the repository and store its password, asked on the console or read from standard input |
 | `ouroboros run [--job NAME] [--force]` | Run the due jobs, or only the named one; `--force` runs them even if not due |
 | `ouroboros status` | Jobs, last results, space usage, history depth |
 | `ouroboros snapshots [--job NAME]` | List snapshots |
@@ -170,8 +170,8 @@ scheduled task need the rights too. Without them, `status` shows only what it
 can read. `pin`, `unpin` and `check` refuse to run while a backup is in
 progress.
 
-`status`, `snapshots`, `ls`, `run`, `restore`, `forget-job`, `check`, `doctor`,
-`pause`, `resume` and `version` accept `--json` for machine-readable output, described in
+`init`, `status`, `snapshots`, `ls`, `run`, `restore`, `forget-job`, `check`,
+`doctor`, `pause`, `resume` and `version` accept `--json` for machine-readable output, described in
 [docs/JSON.md](docs/JSON.md).
 
 `--config PATH` selects another configuration; the default is

@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -523,5 +524,59 @@ func TestRunEndToEnd(t *testing.T) {
 	must("forget-job", runForgetJob(ctx, opts, deps, "docs", forgetJobOptions{confirm: "docs"}))
 	if left, err := b.Snapshots(ctx, backend.SnapshotFilter{}); err != nil || len(left) != 0 {
 		t.Fatalf("left after forget-job: %v, %v", left, err)
+	}
+}
+
+func TestInitPasswordStdin(t *testing.T) {
+	c := newInitCase(t, "")
+	c.deps.readPassword = passwords() // the console must not be used
+	c.deps.stdin = strings.NewReader("correct horse\r\nignored second line\n")
+	c.opts.out = &jsonLines{w: c.out, command: "init"}
+	if err := runInit(context.Background(), c.opts, c.deps); err != nil {
+		t.Fatalf("init: %v\n%s", err, c.errOut)
+	}
+	pw, err := c.deps.newStore(secretPath(c.cfgPath)).Load()
+	if err != nil || string(pw) != "correct horse" {
+		t.Fatalf("stored password %q, %v", pw, err)
+	}
+	var got struct {
+		Type string  `json:"type"`
+		Data initOut `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil || got.Type != "result" || got.Data.Repository != c.repo {
+		t.Fatalf("output %q: %v", c.out, err)
+	}
+	if strings.Contains(c.out.String()+c.errOut.String(), "horse") {
+		t.Fatal("password in the output")
+	}
+}
+
+func TestReadPasswordLine(t *testing.T) {
+	for in, want := range map[string]string{
+		"correct horse\n":       "correct horse",
+		"correct horse\r\n":     "correct horse",
+		"correct horse":         "correct horse",
+		"pass word\nmore\n":     "pass word",
+		"\u00e8 una password\n": "\u00e8 una password",
+	} {
+		got, err := readPasswordLine(strings.NewReader(in))
+		if err != nil || string(got) != want {
+			t.Errorf("%q: got %q, %v", in, got, err)
+		}
+	}
+	for in, want := range map[string]string{
+		"":                                      "no password",
+		"\n":                                    "no password",
+		strings.Repeat("x", maxPasswordBytes+1): "longer than",
+	} {
+		if _, err := readPasswordLine(strings.NewReader(in)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%.20q: got %v, want %q", in, err, want)
+		}
+	}
+	// The rules of the console apply too, and nothing is stored.
+	c := newInitCase(t, "")
+	c.deps.stdin = strings.NewReader("short\n")
+	if err := runInit(context.Background(), c.opts, c.deps); err == nil || !strings.Contains(err.Error(), "at least") || c.secretExists(t) {
+		t.Fatalf("short password: %v", err)
 	}
 }

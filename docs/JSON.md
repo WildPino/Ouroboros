@@ -276,6 +276,18 @@ writes `delete` events before each step, then the result:
 most of the time. A job still in the configuration ends with `job_configured`
 before anything is deleted; a backup in progress, with `locked`.
 
+## init
+
+`init --json --password-stdin` reads the password from the first line of
+standard input and ends with:
+
+```json
+{"repository": "B:\\ouroboros", "password_file": "C:\\ProgramData\\Ouroboros\\secret.bin"}
+```
+
+The password never appears in the output. Without `--password-stdin` the
+password is asked twice on the console, which needs an interactive console.
+
 ## pause, resume
 
 `pause --json` and `resume --json` end with the new state. Pausing a paused

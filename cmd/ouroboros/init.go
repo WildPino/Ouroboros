@@ -28,6 +28,9 @@ type initDeps struct {
 	newStore     func(path string) *secret.Store
 	newBackend   func(cfg *config.Config, configPath string) (repoIniter, error)
 	disk         diskUsager
+	// stdin, when set, supplies the password on one line instead of the
+	// console (--password-stdin).
+	stdin io.Reader
 }
 
 type repoIniter interface {
@@ -35,15 +38,17 @@ type repoIniter interface {
 }
 
 func newInitCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	var passwordStdin bool
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Create the repository and store its password",
 		Long: "Create the restic repository configured in repository.path, store its password\n" +
 			"encrypted for this machine, and reserve the emergency ballast file.\n" +
-			"Must be run as Administrator from an interactive console.",
+			"Must be run as Administrator. The password is asked twice on the console, or\n" +
+			"read once from the first line of standard input with --password-stdin.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInit(cmd.Context(), opts, initDeps{
+			d := initDeps{
 				isElevated:   windows.IsElevated,
 				readPassword: consolePassword(opts.stderr),
 				newStore:     secret.NewStore,
@@ -51,9 +56,21 @@ func newInitCmd(opts *options) *cobra.Command {
 					return newResticBackend(cfg, p)
 				},
 				disk: platformDisk{},
-			})
+			}
+			if passwordStdin {
+				d.stdin = os.Stdin
+			}
+			return runInit(cmd.Context(), opts, d)
 		},
 	}
+	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "read the password from the first line of standard input")
+	return supportsJSON(cmd)
+}
+
+// initOut is the result of "init --json".
+type initOut struct {
+	Repository   string `json:"repository"`
+	PasswordFile string `json:"password_file"`
 }
 
 func runInit(ctx context.Context, opts *options, d initDeps) error {
@@ -81,11 +98,26 @@ func runInit(ctx context.Context, opts *options, d initDeps) error {
 		return fmt.Errorf("a repository password is already stored in %s; remove it first only if no repository uses it", store.Path())
 	}
 
-	pw, err := askNewPassword(d.readPassword)
+	var pw []byte
+	if d.stdin != nil {
+		pw, err = readPasswordLine(d.stdin)
+		if err == nil {
+			if err = checkNewPassword(pw); err != nil {
+				secret.Clear(pw)
+			}
+		}
+	} else {
+		pw, err = askNewPassword(d.readPassword)
+	}
 	if err != nil {
 		return err
 	}
 	defer secret.Clear(pw)
+	// With --json the text below would break the output lines.
+	stdout := opts.stdout
+	if opts.out != nil {
+		stdout = io.Discard
+	}
 
 	b, err := d.newBackend(cfg, opts.configPath)
 	if err != nil {
@@ -94,7 +126,7 @@ func runInit(ctx context.Context, opts *options, d initDeps) error {
 	if err := store.Save(pw); err != nil {
 		return err
 	}
-	fmt.Fprintf(opts.stdout, "Password stored in %s\n", store.Path())
+	fmt.Fprintf(stdout, "Password stored in %s\n", store.Path())
 	if err := b.Init(ctx); err != nil {
 		// Without a repository the stored password is useless and would
 		// block the next attempt.
@@ -103,11 +135,14 @@ func runInit(ctx context.Context, opts *options, d initDeps) error {
 		}
 		return fmt.Errorf("create repository: %w", err)
 	}
-	fmt.Fprintf(opts.stdout, "Repository created in %s\n", repo)
+	fmt.Fprintf(stdout, "Repository created in %s\n", repo)
 
 	warn := reserveBallast(opts, cfg, d.disk)
 
-	fmt.Fprint(opts.stdout, "\n"+
+	if opts.out != nil {
+		opts.out.result(initOut{Repository: repo, PasswordFile: store.Path()})
+	}
+	fmt.Fprint(stdout, "\n"+
 		"IMPORTANT: write down the repository password and keep it somewhere other\n"+
 		"than this computer. Without it the backups cannot be decrypted, by Ouroboros\n"+
 		"or by anyone else.\n")
@@ -139,7 +174,9 @@ func reserveBallast(opts *options, cfg *config.Config, disk diskUsager) bool {
 		fmt.Fprintf(opts.stderr, "warning: ballast not created: %v\n", err)
 		return true
 	}
-	fmt.Fprintf(opts.stdout, "Ballast of %s reserved in %s\n", formatBytes(size), path)
+	if opts.out == nil {
+		fmt.Fprintf(opts.stdout, "Ballast of %s reserved in %s\n", formatBytes(size), path)
+	}
 	return false
 }
 
@@ -172,15 +209,65 @@ func askNewPassword(read func(string) ([]byte, error)) ([]byte, error) {
 		secret.Clear(pw)
 		return nil, errors.New("passwords do not match")
 	}
-	if len(pw) < minPasswordLength {
+	if err := checkNewPassword(pw); err != nil {
 		secret.Clear(pw)
-		return nil, fmt.Errorf("password must be at least %d characters", minPasswordLength)
+		return nil, err
+	}
+	return pw, nil
+}
+
+// checkNewPassword applies the rules for a new repository password. Its
+// errors never contain the password.
+func checkNewPassword(pw []byte) error {
+	if len(pw) < minPasswordLength {
+		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
 	}
 	// restic trims what the password command prints, so surrounding blanks
 	// would be lost when restic reads the password back.
 	if !bytes.Equal(bytes.TrimSpace(pw), pw) {
-		secret.Clear(pw)
-		return nil, errors.New("password must not start or end with spaces")
+		return errors.New("password must not start or end with spaces")
+	}
+	return nil
+}
+
+// maxPasswordBytes bounds what --password-stdin reads.
+const maxPasswordBytes = 1024
+
+// readPasswordLine reads the password from the first line of r, without a
+// trailing CR LF or LF. It reads one byte at a time so that no copy of the
+// password stays in a buffer it cannot clear, and so that it does not wait
+// for the writer to close the stream after the line.
+func readPasswordLine(r io.Reader) ([]byte, error) {
+	pw := make([]byte, 0, maxPasswordBytes)
+	var b [1]byte
+	for {
+		n, err := r.Read(b[:])
+		if n == 1 {
+			if b[0] == '\n' {
+				break
+			}
+			if len(pw) == maxPasswordBytes {
+				secret.Clear(pw[:cap(pw)])
+				b[0] = 0
+				return nil, fmt.Errorf("password on standard input is longer than %d bytes", maxPasswordBytes)
+			}
+			pw = append(pw, b[0])
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			secret.Clear(pw[:cap(pw)])
+			return nil, fmt.Errorf("read the password from standard input: %w", err)
+		}
+	}
+	b[0] = 0
+	if n := len(pw); n > 0 && pw[n-1] == '\r' {
+		pw[n-1] = 0
+		pw = pw[:n-1]
+	}
+	if len(pw) == 0 {
+		return nil, errors.New("no password on standard input")
 	}
 	return pw, nil
 }

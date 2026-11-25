@@ -149,7 +149,7 @@ adds no logic of its own.
 - [x] `pause` / `resume` of the scheduled task, shown by `status`
 - [x] `forget-job NAME [--dry-run]`: deleting a removed job's snapshots
       (DESIGN §12.5)
-- [ ] `init --password-stdin`, keeping the rule that the password never
+- [x] `init --password-stdin`, keeping the rule that the password never
       appears in arguments or environment
 
 Done when: every action of DESIGN.md §12.1 can be done from the command line
