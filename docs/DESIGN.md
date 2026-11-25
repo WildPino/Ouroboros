@@ -215,6 +215,13 @@ A failed backup is treated as out of space when the free space measured right
 after the failure is below `prune_headroom`. Measuring works in every Windows
 language and does not depend on restic's error text.
 
+restic does not fail at once when a write fails: it retries for about 15
+minutes. While a backup runs, Ouroboros measures the free space on the
+repository partition every 5 seconds. If it stays below two packs (twice the
+resolved pack size, §7) for 60 seconds, restic is stopped and the backup is
+treated as failed on a full disk. The lock restic leaves behind is stale and
+is removed before the next operation (§2.2).
+
 If a backup fails because the disk is full:
 
 1. Delete the ballast.

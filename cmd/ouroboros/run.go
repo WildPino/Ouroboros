@@ -88,7 +88,10 @@ func runRun(ctx context.Context, opts *options, ropts scheduler.Options, d repoD
 	defer closeLog()
 	r.Log = log
 	dir := filepath.Dir(opts.configPath)
+	// restic cannot write anything with less than about two packs free.
+	_, packSizeMB := resolvePerformance(cfg)
 	runner := &scheduler.Runner{
+		StallFree:   2 * uint64(packSizeMB) << 20,
 		Config:      cfg,
 		Backend:     b,
 		Space:       r,

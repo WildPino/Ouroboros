@@ -37,9 +37,7 @@ func newResticBackend(cfg *config.Config, configPath string) (*restic.Restic, er
 	if err != nil {
 		return nil, err
 	}
-	// Unknown free memory (0) leaves the profile unconstrained.
-	freeRAM, _ := windows.FreeMemory()
-	readConcurrency, packSizeMB := cfg.Performance.Resolve(runtime.NumCPU(), freeRAM)
+	readConcurrency, packSizeMB := resolvePerformance(cfg)
 	return restic.New(restic.Options{
 		Executable:      exe,
 		Repository:      cfg.Repository.Path,
@@ -80,4 +78,11 @@ func newInternalCmd(opts *options) *cobra.Command {
 		},
 	})
 	return cmd
+}
+
+// resolvePerformance applies the memory profile to this machine.
+func resolvePerformance(cfg *config.Config) (readConcurrency, packSizeMB int) {
+	// Unknown free memory (0) leaves the profile unconstrained.
+	freeRAM, _ := windows.FreeMemory()
+	return cfg.Performance.Resolve(runtime.NumCPU(), freeRAM)
 }
