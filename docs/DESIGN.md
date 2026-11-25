@@ -467,6 +467,19 @@ Windows asks once when the window opens, as for disk and backup tools. The
 password stays readable only by administrators and SYSTEM (§6). There is no
 service and no communication channel to secure.
 
+Microsoft recommends hosting WebView2 in a process that is not elevated,
+because a page compromised by web content would run with the host's rights.
+Ouroboros deviates from this on purpose and removes the way in instead:
+
+- the page and everything it uses are embedded in the executable and served
+  from one fixed origin; every other request and every navigation is
+  cancelled, so no external content can ever load;
+- developer tools, the default context menu and browser permissions
+  (clipboard, notifications, downloads) are off;
+- the page can reach Go only through the bound calls of the bridge contract
+  (§12.8, question 7), each of which validates its arguments; there is no
+  generic "run this command" call.
+
 Because the window runs elevated, "the user who opened the program" (§12.1)
 is taken from the Explorer process of the session, not from the elevated
 token, so that Documents and Desktop are the right ones when another
@@ -513,8 +526,18 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 ### 12.6 Technology
 
 - Window: WebView2 through `github.com/jchv/go-webview2` (pure Go, no cgo),
-  pinned to a commit. If the WebView2 runtime is missing, the program says so
-  and links to Microsoft's installer.
+  pinned to a commit. The library lacks some of what §12.3 needs: it does
+  not expose `NavigationStarting`, it grants the page clipboard read access,
+  and it ends the process with `log.Fatal` on some errors. Whether these are
+  handled around it or in a small fork kept in the repository is decided
+  with the prototype (question 3).
+- WebView2 user data folder: `%LOCALAPPDATA%\Ouroboros\WebView2` of the
+  account that approved the elevation, never next to the executable in
+  Program Files.
+- Runtime: part of Windows 11, and installed on almost all Windows 10
+  machines by Microsoft. If it is missing, the window cannot be created and
+  the program shows a native message with a link to Microsoft's WebView2
+  Runtime download page; the command line keeps working.
 - Interface: HTML, CSS and plain JavaScript embedded in the executable; no
   build step, no framework, no network access. The page talks to Go only
   through bound functions and loads nothing from outside the executable.
@@ -552,10 +575,12 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      embedding it.
    - Whether embedding executables and requiring elevation raises antivirus
      detections is measured on the prototype (question 3).
-2. WebView2: where its user data folder goes for an elevated process (by
-   default it is created next to the executable, in Program Files); how
-   developer tools, the context menu, navigation and remote content are
-   disabled; what happens on systems without the runtime.
+2. WebView2. Settled: the window stays elevated, with the mitigations of
+   §12.3 recorded as a deliberate deviation from Microsoft's guidance; user
+   data folder, runtime detection and library gaps in §12.6. Not verified:
+   whether Windows 10 LTSC editions ship the runtime; it is checked on such a
+   machine if one is available, and the missing-runtime message covers it
+   otherwise.
 3. Packaging: which tool embeds the manifest, icon and version information
    (a new build-time dependency), and the size of the final download.
 4. Uninstall: how `Ouroboros.exe` removes itself, and how an update replaces

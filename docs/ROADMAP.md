@@ -106,7 +106,7 @@ DESIGN.md §12.
 - [x] Distribution risks: SmartScreen on an unsigned download, antivirus
       reactions to an executable that embeds executables and asks for
       elevation; options (code signing, separate files) and their cost
-- [ ] WebView2: runtime presence on Windows 10 and 11 (including LTSC), user
+- [x] WebView2: runtime presence on Windows 10 and 11 (including LTSC), user
       data folder for an elevated process, disabling developer tools,
       context menu, navigation and remote content; behaviour when the
       runtime is missing
