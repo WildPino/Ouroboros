@@ -85,7 +85,7 @@ behaviour changed.
 ## M7 — Release v0.1.0
 
 - [x] `docs/TESTING.md`, `docs/RESTORE.md` (restore with Ouroboros and with plain restic)
-- [ ] `CHANGELOG.md`
+- [x] `CHANGELOG.md`
 - [ ] Release workflow: tagged builds, zip with `ouroboros.exe`, example config,
       SHA-256 checksums
 - [x] README reviewed against actual behaviour
