@@ -56,15 +56,19 @@ type doctorEnv interface {
 }
 
 func newDoctorCmd(opts *options) *cobra.Command {
-	return &cobra.Command{
+	return supportsJSON(&cobra.Command{
 		Use:   "doctor",
 		Short: "Check restic, permissions, VSS, configuration and free space",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			results, cfgErr := runDoctor(cmd.Context(), opts.configPath, platformEnv{})
+			if opts.out != nil {
+				opts.out.result(doctorJSON(results))
+				return doctorOutcome(results, cfgErr)
+			}
 			return reportDoctor(opts.stdout, results, cfgErr)
 		},
-	}
+	})
 }
 
 // runDoctor performs every check. The returned error is the configuration
@@ -164,11 +168,19 @@ func needsVSS(cfg *config.Config) bool {
 }
 
 func reportDoctor(w io.Writer, results []checkResult, cfgErr error) error {
-	worst := statusOK
 	for _, r := range results {
 		// Multi-line details (validation problems) are indented under the check.
 		detail := strings.ReplaceAll(r.detail, "\n", "\n"+strings.Repeat(" ", 20))
 		fmt.Fprintf(w, "[%s] %-12s %s\n", r.status, r.name, detail)
+	}
+	return doctorOutcome(results, cfgErr)
+}
+
+// doctorOutcome maps the checks to the exit code: configuration errors
+// first, then the worst check.
+func doctorOutcome(results []checkResult, cfgErr error) error {
+	worst := statusOK
+	for _, r := range results {
 		worst = max(worst, r.status)
 	}
 	switch {
@@ -225,4 +237,24 @@ type platformDisk struct{}
 
 func (platformDisk) DiskUsage(path string) (total, free uint64, err error) {
 	return windows.DiskUsage(path)
+}
+
+// Schema of "doctor --json"; documented in docs/JSON.md.
+type doctorOut struct {
+	Checks []doctorCheckOut `json:"checks"`
+}
+
+type doctorCheckOut struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+}
+
+func doctorJSON(results []checkResult) doctorOut {
+	out := doctorOut{Checks: []doctorCheckOut{}}
+	for _, r := range results {
+		st := map[checkStatus]string{statusOK: "ok", statusWarn: "warn", statusFail: "fail"}[r.status]
+		out.Checks = append(out.Checks, doctorCheckOut{Name: r.name, Status: st, Detail: r.detail})
+	}
+	return out
 }

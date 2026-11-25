@@ -41,6 +41,9 @@ func (e notElevatedError) Is(target error) bool {
 
 var errNotElevated = notElevatedError{}
 
+// errCheckFailed wraps the error of a check that found problems.
+var errCheckFailed = errors.New("repository check failed")
+
 // repoSession is an open repository for one command.
 type repoSession struct {
 	cfg     *config.Config
@@ -135,7 +138,7 @@ func newSnapshotsCmd(opts *options) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&job, "job", "", "only snapshots of this job")
-	return cmd
+	return supportsJSON(cmd)
 }
 
 func runSnapshots(ctx context.Context, opts *options, d repoDeps, job string) error {
@@ -153,6 +156,10 @@ func runSnapshots(ctx context.Context, opts *options, d repoDeps, job string) er
 		if job == "" || strings.EqualFold(sn.Job(), job) {
 			shown = append(shown, sn)
 		}
+	}
+	if opts.out != nil {
+		opts.out.result(snapshotsJSON(shown))
+		return nil
 	}
 	if len(shown) == 0 {
 		fmt.Fprintln(opts.stdout, "No snapshots.")
@@ -240,7 +247,7 @@ func newCheckCmd(opts *options) *cobra.Command {
 		},
 	}
 	cmd.Flags().Float64Var(&readData, "read-data", 0, "also read back this `PERCENT` of the data (0-100)")
-	return cmd
+	return supportsJSON(cmd)
 }
 
 func runCheck(ctx context.Context, opts *options, d repoDeps, readData float64) error {
@@ -281,7 +288,11 @@ func runCheck(ctx context.Context, opts *options, d repoDeps, readData float64) 
 	}
 
 	if checkErr != nil {
-		return fmt.Errorf("repository check failed: %w", checkErr)
+		return fmt.Errorf("%w: %w", errCheckFailed, checkErr)
+	}
+	if opts.out != nil {
+		opts.out.result(map[string]any{"read_data": copts.ReadDataSubset})
+		return nil
 	}
 	fmt.Fprintln(opts.stdout, "No errors were found.")
 	return nil
@@ -370,4 +381,35 @@ func checkRestoreTarget(target, repo string, overwrite bool) error {
 		return fmt.Errorf("%s is not empty: choose an empty folder, or pass --overwrite to replace files with the same name", target)
 	}
 	return nil
+}
+
+// Schema of "snapshots --json"; documented in docs/JSON.md.
+type snapshotOut struct {
+	ID        string    `json:"id"`
+	ShortID   string    `json:"short_id"`
+	Time      time.Time `json:"time"`
+	Job       string    `json:"job"`
+	Pinned    bool      `json:"pinned"`
+	Hostname  string    `json:"hostname"`
+	Paths     []string  `json:"paths"`
+	Files     *uint64   `json:"files"`
+	SizeBytes *uint64   `json:"size_bytes"`
+}
+
+func snapshotsJSON(snaps []backend.Snapshot) map[string][]snapshotOut {
+	out := []snapshotOut{}
+	for _, sn := range snaps {
+		o := snapshotOut{
+			ID: sn.ID, ShortID: shortID(sn.ID), Time: sn.Time.UTC(), Job: sn.Job(),
+			Pinned: sn.Pinned(), Hostname: sn.Hostname, Paths: sn.Paths,
+		}
+		if o.Paths == nil {
+			o.Paths = []string{}
+		}
+		if sn.Bytes > 0 {
+			o.Files, o.SizeBytes = ptr(sn.Files), ptr(sn.Bytes)
+		}
+		out = append(out, o)
+	}
+	return map[string][]snapshotOut{"snapshots": out}
 }

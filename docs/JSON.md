@@ -43,6 +43,7 @@ code `3`, and its data then lists the problems.
 | `cannot_reclaim` | not enough space could be freed for a backup |
 | `backup_too_large` | a backup can never fit in the partition |
 | `timeout` | restic exceeded its configured timeout |
+| `check_failed` | the repository check found problems |
 | `cancelled` | the command was interrupted |
 | `failed` | any other error |
 
@@ -113,3 +114,51 @@ The example shows the `data` field of the result line.
 | `jobs[].predicted_growth_bytes` | `null` before the first backup |
 | `recent_problems` | up to 50 history entries that failed or had warnings, newest first; `kind` is `backup`, `reclaim`, `retention`, `prune` or `check` |
 | `problems` | what could not be determined; when not empty the exit code is `3` |
+
+## snapshots
+
+`snapshots --json [--job NAME]`, oldest first.
+
+```json
+{
+  "snapshots": [
+    {
+      "id": "6d904825df73a50389c4267d49efba30955fdae7c8ae7617ebf88ddebaf3b7a0",
+      "short_id": "6d904825",
+      "time": "2026-11-24T18:29:48Z",
+      "job": "docs",
+      "pinned": false,
+      "hostname": "pc",
+      "paths": ["C:\Users\name\Documents"],
+      "files": 3,
+      "size_bytes": 300013
+    }
+  ]
+}
+```
+
+`files` and `size_bytes` describe the backed-up data, as recorded by restic
+0.17 and later; they are `null` for older snapshots. `job` is empty for a
+snapshot made outside Ouroboros.
+
+## check
+
+`check --json [--read-data PERCENT]`. The result is
+`{"read_data": "5%"}`, with an empty string when no data was read back. A
+check that finds problems ends with an error line of code `check_failed`.
+
+## doctor
+
+`doctor --json`. The result lists every check that ran; the exit code is as
+without `--json`.
+
+```json
+{
+  "checks": [
+    {"name": "config", "status": "ok", "detail": "C:\ProgramData\Ouroboros\ouroboros.toml"},
+    {"name": "admin", "status": "warn", "detail": "not running as Administrator; VSS and the scheduled task need it"}
+  ]
+}
+```
+
+`status` is `ok`, `warn` or `fail`. `detail` may span several lines.

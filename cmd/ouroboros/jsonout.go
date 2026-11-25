@@ -97,6 +97,8 @@ func errorCode(err error) string {
 		return "backup_too_large"
 	case errors.Is(err, space.ErrCannotReclaim):
 		return "cannot_reclaim"
+	case errors.Is(err, errCheckFailed):
+		return "check_failed"
 	case errors.Is(err, errNotElevated):
 		return "not_elevated"
 	case errors.Is(err, context.Canceled):

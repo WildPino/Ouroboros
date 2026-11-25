@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -240,5 +241,51 @@ func TestRestoreCommand(t *testing.T) {
 	}
 	if n := len(c.repo.calls); n != 2 {
 		t.Fatalf("calls %v", c.repo.calls)
+	}
+}
+
+func TestSnapshotsJSON(t *testing.T) {
+	c := newRepoCase(t)
+	c.repo.snaps[0].Files, c.repo.snaps[0].Bytes = 3, 300
+	c.opts.out = &jsonLines{w: c.out, command: "snapshots"}
+	if err := runSnapshots(context.Background(), c.opts, c.deps, "docs"); err != nil {
+		t.Fatal(err)
+	}
+	decodeJSONLines(t, c.out.String())
+	var got struct {
+		Data struct {
+			Snapshots []snapshotOut `json:"snapshots"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(c.out.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	s := got.Data.Snapshots
+	if len(s) != 1 || s[0].Job != "docs" || s[0].ShortID != "aaaa1111" || len(s[0].ID) <= 8 ||
+		s[0].SizeBytes == nil || *s[0].SizeBytes != 300 || *s[0].Files != 3 {
+		t.Fatalf("%+v", s)
+	}
+
+	c.out.Reset()
+	c.opts.out = &jsonLines{w: c.out, command: "snapshots"}
+	runSnapshots(context.Background(), c.opts, c.deps, "none")
+	if !strings.Contains(c.out.String(), `"data":{"snapshots":[]}`) {
+		t.Fatalf("empty list: %s", c.out)
+	}
+}
+
+func TestCheckJSON(t *testing.T) {
+	c := newRepoCase(t)
+	c.opts.out = &jsonLines{w: c.out, command: "check"}
+	if err := runCheck(context.Background(), c.opts, c.deps, 5); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(c.out.String(), `"type":"result"`) || !strings.Contains(c.out.String(), `"data":{"read_data":"5%"}`) {
+		t.Fatalf("%s", c.out)
+	}
+	c.repo.checkErr = errors.New("pack damaged")
+	err := runCheck(context.Background(), c.opts, c.deps, 0)
+	if errorCode(err) != "check_failed" || !strings.Contains(err.Error(), "repository check failed: pack damaged") {
+		t.Fatalf("got %v (%s)", err, errorCode(err))
 	}
 }

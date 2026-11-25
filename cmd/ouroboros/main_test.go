@@ -251,6 +251,25 @@ func TestDoctor(t *testing.T) {
 		if code := codeOf(reportDoctor(&out, results, cfgErr)); code != exitConfig {
 			t.Fatalf("exit code %d, want %d", code, exitConfig)
 		}
+		if code := codeOf(doctorOutcome(results, cfgErr)); code != exitConfig {
+			t.Fatalf("JSON exit code %d, want %d", code, exitConfig)
+		}
+	})
+
+	t.Run("json", func(t *testing.T) {
+		env := healthyEnv()
+		env.elevated = false
+		results, _ := runDoctor(context.Background(), good, env)
+		out := doctorJSON(results)
+		found := false
+		for _, c := range out.Checks {
+			if c.Name == "admin" {
+				found = c.Status == "warn" && c.Detail != ""
+			}
+		}
+		if !found || len(out.Checks) != len(results) {
+			t.Fatalf("%+v", out)
+		}
 	})
 }
 
