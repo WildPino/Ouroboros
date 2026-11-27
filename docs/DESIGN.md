@@ -576,16 +576,37 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
   - `NavigationStarting` and `FrameNavigationStarting` handlers that cancel
     any navigation outside the fixed origin;
   - a `NewWindowRequested` handler that marks every popup handled without
-    opening one;
+    opening one, and a `DownloadStarting` handler that cancels every
+    download;
   - a check of each web message's source document, dropping messages from
     any other origin;
   - every browser permission denied (upstream grants clipboard read);
-  - errors returned instead of `log.Fatal`.
+  - settings off: developer tools, context menu, status bar, host objects,
+    the browser's keyboard shortcuts (print, find, save), password saving,
+    form autofill and swipe navigation;
+  - a request that no handler answers gets 403 instead of going out;
+  - errors returned instead of `log.Fatal`, and HRESULTs checked.
+- The copy has no `WebView2Loader.dll`. Upstream looks for it in the DLL
+  search path, which starts in the folder of the executable, a downloads
+  folder for the first setup, where any file named so would run elevated;
+  failing that it loads an embedded copy from memory, which antivirus
+  programs treat as suspect. A loader written in Go does instead what that
+  DLL does: it reads the folder of the machine-wide, stable Evergreen
+  Runtime from `HKEY_LOCAL_MACHINE` (writable only by administrators; the
+  per-user installation, preview channels and policy overrides are not
+  used), refuses versions older than 110, loads `EmbeddedBrowserWebView.dll`
+  from that folder with its dependencies searched only there and in
+  System32, and calls its `CreateWebViewEnvironmentWithOptionsInternal`, the
+  entry point the DLL itself calls. The `WEBVIEW2_*` environment variables,
+  which a program that is not elevated can set for the user to add browser
+  arguments such as a debugging port, are removed from the process first.
 - Embedded assets are served from `https://app.ouroboros.invalid/` through a
-  `WebResourceRequested` filter on every request; anything else gets 403.
-  Each response carries `Content-Security-Policy: default-src 'self';
-  frame-ancestors 'none'`, which also blocks inline scripts, so the page keeps
-  its script in separate files.
+  `WebResourceRequested` filter on every request; only `GET` of an embedded
+  file succeeds, anything else gets 403, 404 or 405. Each response carries
+  `Content-Security-Policy: default-src 'self'; base-uri 'none'; form-action
+  'none'; frame-ancestors 'none'; object-src 'none'`, which also blocks
+  inline scripts and any frame, so the page keeps its script in separate
+  files; and `X-Content-Type-Options: nosniff`.
 - Calls that show a native dialog run from the window's message loop
   (`Dispatch`), not inside the WebView2 event that received the call, and
   report their result to the page afterwards.
@@ -612,8 +633,13 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
 - Setup and uninstall take their target folders and registry root as
   parameters, so tests run them in temporary directories and a test registry
   key.
-- The window itself, the UAC prompt and the real installation are checked by
-  hand, with a procedure in `docs/TESTING.md`.
+- The window's hardening has a test that opens the real window on a hostile
+  page (popups, downloads, outside requests and navigations, frames,
+  malformed and invalid calls) and checks that each is refused and that only
+  valid calls reach the command line. It needs a desktop and the runtime, so
+  it runs only when asked for (`docs/TESTING.md`).
+- The UAC prompt and the real installation are checked by hand, with a
+  procedure in `docs/TESTING.md`.
 
 ### 12.8 Settled questions
 

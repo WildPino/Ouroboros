@@ -28,6 +28,9 @@ func (e *ValidationError) Is(target error) bool { return target == ErrInvalid }
 // commas or spaces.
 var jobNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+// ValidJobName reports whether name is allowed as a job name.
+func ValidJobName(name string) bool { return jobNamePattern.MatchString(name) }
+
 // Pack sizes accepted by restic --pack-size, in MiB.
 const (
 	minPackSizeMB = 4

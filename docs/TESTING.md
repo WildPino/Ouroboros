@@ -95,6 +95,27 @@ fails or if no reclaim happened. The output is saved to `test-results\diskfull-t
 If the script is interrupted, detach the disk by hand: open `diskpart`, then
 `select vdisk file="<WorkDir>\disk.vhdx"` and `detach vdisk`.
 
+## The window
+
+The tests of `internal/gui` check the bridge, the page files and their
+server without a window. Two more open the real window and run only when
+asked, since they need a desktop session and the WebView2 Runtime; no
+administrator console is needed:
+
+```powershell
+$env:OUROBOROS_WINDOW_TESTS = '1'; go test -run TestWindow ./internal/gui/
+```
+
+- `TestWindowHardening` loads a hostile page (`internal/gui/testdata/hostile`)
+  that opens popups, starts a download, sends requests and navigations
+  outside the window's origin, loads a frame and sends malformed and invalid
+  calls. Each must be refused, the inline script must not run, and only the
+  one valid call may reach the command line, which the test replaces.
+- `TestWindowPage` loads the real page and checks that it asks for the
+  versions and the status through the bridge.
+
+Each opens a window for a few seconds.
+
 ## Builds of Ouroboros.exe
 
 ```powershell

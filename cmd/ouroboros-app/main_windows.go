@@ -31,9 +31,7 @@ func main() {
 	}
 	switch {
 	case len(os.Args) == 1:
-		message("Ouroboros "+version+"\n\nThe window is not part of this build yet. "+
-			"Install with \"Ouroboros.exe install\" and use the ouroboros command line.", windows.MB_ICONINFORMATION)
-		os.Exit(exitOK)
+		os.Exit(runWindow())
 	case len(os.Args) == 2 && os.Args[1] == embeddedFlag:
 		os.Exit(embeddedVersions())
 	case len(os.Args) == 2 && os.Args[1] == "install":

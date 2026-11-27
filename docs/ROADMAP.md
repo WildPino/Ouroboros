@@ -185,11 +185,11 @@ manual run leaves no trace after uninstall.
 
 ### M8.4 — Window shell
 
-- [ ] WebView2 host with the M8.0 hardening, embedded assets only
-- [ ] Bridge implementing the M8.0 contract, calling `ouroboros.exe`; tested
-      with a fake command runner
-- [ ] Native folder picker, confirmation dialogs, missing-runtime message
-- [ ] Single window: opening it again focuses the existing one
+- [x] WebView2 host with the M8.0 hardening, embedded assets only
+- [x] Bridge implementing the M8.0 contract, calling `ouroboros.exe`; tested
+      with a fake command runner. Calls used by later screens arrive with them
+- [x] Native folder picker, confirmation dialogs, missing-runtime message
+- [x] Single window: opening it again focuses the existing one
 
 Done when: an empty window opens elevated, calls one command through the
 bridge and shows its result, and the bridge rejects anything outside the
@@ -202,6 +202,8 @@ contract.
       with an administrator account: suggested folders are the user's
 - [ ] Runs install (M8.3), writes the configuration, `init`, task, first
       backup with progress
+- [ ] Bridge calls `setup.drives`, `setup.suggestedFolders`, `setup.run`;
+      setup asks an open window to close
 
 Done when: on a clean machine, download → double-click → three answers →
 first backup finished, without a terminal (owner's manual run).
@@ -211,6 +213,7 @@ first backup finished, without a terminal (owner's manual run).
 - [ ] Jobs with last result, next run, snapshots; partition usage and margin;
       recent warnings and errors
 - [ ] Back up now with progress; pause and resume; refresh while open
+- [ ] Uninstall from the window (`app.uninstall`)
 
 Done when: the window shows the same facts as `status`, and the actions work
 while the scheduled task is also running.
@@ -220,6 +223,7 @@ while the scheduled task is also running.
 - [ ] Add, edit and remove jobs; advanced settings page
 - [ ] Warning before overwriting a hand-edited configuration
 - [ ] Deleting a removed job's snapshots, if allowed in M8.0
+- [ ] Bridge calls `config.*` and `jobs.*`
 
 Done when: every configuration change made in the window passes
 `config validate` and is used by the next run.
@@ -229,6 +233,7 @@ Done when: every configuration change made in the window passes
 - [ ] Pick job and snapshot by date, browse folders, select files and
       folders, choose the target, restore with progress
 - [ ] Extra confirmation to restore over the original location
+- [ ] Bridge calls `restore.run` and `restore.cancel`
 
 Done when: files chosen in the window are restored identical, checked by a
 test and by the owner's manual run.
