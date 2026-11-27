@@ -18,13 +18,13 @@ func runWindow() int {
 		message("Ouroboros cannot start: "+err.Error(), windows.MB_ICONERROR)
 		return exitError
 	}
-	local, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, 0)
+	dataPath, err := setup.PrepareWebViewDir(tgt)
 	if err != nil {
 		message("Ouroboros cannot start: "+err.Error(), windows.MB_ICONERROR)
 		return exitError
 	}
 	err = gui.Run(gui.Options{
-		DataPath: filepath.Join(local, "Ouroboros", "WebView2"),
+		DataPath: dataPath,
 		CLI:      gui.ExecRunner{Path: filepath.Join(tgt.ProgramDir, "bin", "ouroboros.exe")},
 		Info:     func() (gui.AppInfo, error) { return appInfo(tgt) },
 	})

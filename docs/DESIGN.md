@@ -271,6 +271,7 @@ Stored in `%ProgramData%\Ouroboros\`:
 | `state.json` | per job: last attempt, last success, last error; maintenance timestamps |
 | `history.jsonl` | one line per backup/reclaim/prune/check with stats (used by the predictor and `status`) |
 | `logs\` | rotated log files |
+| `WebView2\` | the window's browser data (§12.6) |
 
 All writes to `state.json` are atomic (write temp file, flush, rename).
 `history.jsonl` is append-only; corrupted trailing lines are ignored on read.
@@ -503,7 +504,10 @@ administrator account approved the prompt.
     restic\LICENSE
   ```
 - Configuration, password, state and logs: `C:\ProgramData\Ouroboros\`, as
-  today, with the folder restricted to SYSTEM and Administrators (§6).
+  today, with the folder restricted to SYSTEM and Administrators (§6) and
+  owned by Administrators: any user may create a folder in ProgramData, and
+  whoever created it first could otherwise, as its owner, give itself access
+  again.
 - The configuration sets `restic_path` to the installed `restic.exe`, so the
   task never depends on `PATH`.
 - Start menu shortcut to `Ouroboros.exe`, and an entry in "Installed apps"
@@ -614,9 +618,17 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
   the first time and about 1.5 s after that, elevated or not; the window
   executable is 3.3 MB; the user data folder grows to about 5 MB. The folder
   picker works elevated, for other drives and for the user's own folders.
-- WebView2 user data folder: `%LOCALAPPDATA%\Ouroboros\WebView2` of the
-  account the window runs as, never next to the executable in
-  Program Files.
+- WebView2 user data folder: `C:\ProgramData\Ouroboros\WebView2`, never
+  next to the executable in Program Files, and not in the user's
+  `%LOCALAPPDATA%`, where any program the user runs without elevation could
+  change the data of the elevated browser. The window restricts
+  `C:\ProgramData\Ouroboros` as setup does before using it, since it runs
+  before the first setup, and refuses a `WebView2` folder that Administrators
+  do not own: the elevated window did not create it.
+- The browser is created in the hidden window and starts hidden like it; it
+  is made visible when the window is shown, hidden while the window is
+  minimized, and the window test checks that it is visible and fills the
+  window.
 - Runtime: part of Windows 11, and installed on almost all Windows 10
   machines by Microsoft. If it is missing, the window cannot be created and
   the program shows a native message with a link to Microsoft's WebView2
@@ -726,8 +738,8 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    picker starts in that profile. Checked on the prototype for the same
    account; the different-account case is part of the owner's manual test
    in M8.5. If the shell is not running, the window falls back to its own
-   folders and says so. The WebView2 user data folder belongs to the
-   account the window runs as (§12.6).
+   folders and says so. The WebView2 user data folder is in
+   `C:\ProgramData\Ouroboros`, whatever account the window runs as (§12.6).
 6. Interface language. Settled: English only in 0.2.0. Every string the
    page shows lives in one table, so a translation can be added later
    without touching the screens.

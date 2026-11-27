@@ -113,8 +113,9 @@ func newEnv(t *testing.T) *env {
 			Registry:       registry.CURRENT_USER,
 			UninstallKey:   key + `\Uninstall\Ouroboros`,
 			EnvironmentKey: key + `\Environment`,
-			// The current user too, so that the test can clean up.
-			DataDirSDDL: DataDirSDDL + "(A;OICI;FA;;;" + u.User.Sid.String() + ")",
+			// The current user too, so that the test can clean up, and
+			// as owner, which needs no administrator rights.
+			DataDirSDDL: testDataDirSDDL(u.User.Sid),
 			LockName:    fmt.Sprintf(`Local\OuroborosSetupTest-%d-%d`, os.Getpid(), rand.Uint32()),
 		},
 		self: filepath.Join(root, "Downloads", "Ouroboros.exe"),
@@ -680,4 +681,66 @@ func TestCleanOldOnlyInInstalledFolders(t *testing.T) {
 	if _, err := os.Stat(old); err != nil {
 		t.Errorf("CleanOld touched a folder that is not the installation: %v", err)
 	}
+}
+
+// testDataDirSDDL is DataDirSDDL with the current user as owner and with
+// access, which a test without administrator rights can set.
+func testDataDirSDDL(user *windows.SID) string {
+	sddl := strings.Replace(DataDirSDDL, "O:BA", "O:"+user.String(), 1)
+	return sddl + "(A;OICI;FA;;;" + user.String() + ")"
+}
+
+func TestDataDirOwner(t *testing.T) {
+	e := newEnv(t)
+	if err := os.MkdirAll(e.tgt.DataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.install("v0.2.0")
+	u, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := ownedBy(e.tgt.DataDir, u.User.Sid); err != nil || !ok {
+		t.Errorf("owner of the data folder: %v, %v", ok, err)
+	}
+	if ok, err := ownedBy(e.tgt.DataDir, mustSID(t, windows.WinLocalSystemSid)); err != nil || ok {
+		t.Errorf("owned by SYSTEM: %v, %v", ok, err)
+	}
+}
+
+func TestPrepareWebViewDir(t *testing.T) {
+	e := newEnv(t)
+	dir, err := PrepareWebViewDir(e.tgt)
+	if err != nil || dir != filepath.Join(e.tgt.DataDir, "WebView2") {
+		t.Fatalf("PrepareWebViewDir = %q, %v", dir, err)
+	}
+	if _, err := os.Stat(e.tgt.DataDir); err != nil {
+		t.Fatalf("data folder not created: %v", err)
+	}
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := PrepareWebViewDir(e.tgt); err != nil || got != dir {
+		t.Errorf("own folder: %q, %v", got, err)
+	}
+
+	// A folder owned by anyone else is refused. Without administrator
+	// rights a test cannot give a folder away, so the expected owner
+	// changes instead.
+	err = checkOwner(dir, mustSID(t, windows.WinLocalSystemSid))
+	if err == nil || !strings.Contains(err.Error(), "belongs to another account") {
+		t.Errorf("folder of another owner: %v", err)
+	}
+	if err := checkOwner(filepath.Join(e.tgt.DataDir, "missing"), mustSID(t, windows.WinLocalSystemSid)); err != nil {
+		t.Errorf("missing folder: %v", err)
+	}
+}
+
+func mustSID(t *testing.T, kind windows.WELL_KNOWN_SID_TYPE) *windows.SID {
+	t.Helper()
+	sid, err := windows.CreateWellKnownSid(kind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sid
 }

@@ -169,7 +169,8 @@ Administrator PowerShell unless they say otherwise.
      version, `where.exe ouroboros` finds only `bin\ouroboros.exe`, and
      `where.exe restic` does not list the Ouroboros folder;
    - `icacls C:\ProgramData\Ouroboros` lists only `NT AUTHORITY\SYSTEM` and
-     `BUILTIN\Administrators`.
+     `BUILTIN\Administrators`, and `(Get-Acl C:\ProgramData\Ouroboros).Owner`
+     is `BUILTIN\Administrators`.
 2. **Configure and schedule.** Create the configuration with
    `ouroboros config init > C:\ProgramData\Ouroboros\ouroboros.toml`, set the
    test repository and one job in it, and run
