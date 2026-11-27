@@ -170,13 +170,13 @@ a hidden diagnostic argument prints the versions of the embedded programs.
 
 ### M8.3 — Install, update, uninstall (no window yet)
 
-- [ ] `internal/setup` with target folders and registry root as parameters
-- [ ] Install: Program Files files, ProgramData permissions, `restic_path`,
+- [x] `internal/setup` with target folders and registry root as parameters
+- [x] Install: Program Files files, ProgramData permissions, `restic_path`,
       Start menu shortcut, "Installed apps" entry, machine `PATH`
-- [ ] Update over an older version; refusal over a newer one
-- [ ] Uninstall, including self-removal; configuration and password only on
+- [x] Update over an older version; refusal over a newer one
+- [x] Uninstall, including self-removal; configuration and password only on
       request; never the repository
-- [ ] Tests in temporary folders and a test registry key
+- [x] Tests in temporary folders and a test registry key
 - [ ] Manual procedure in `docs/TESTING.md`, run by the owner on a real
       machine
 
