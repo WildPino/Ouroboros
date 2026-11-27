@@ -1,0 +1,6 @@
+{
+  "version": "0.20.0",
+  "url": "https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_windows_amd64.zip",
+  "sha256": "bba9061c3dce081701ab353ec8cb73a78be73b71a538aad560f2d1067602b7fe",
+  "exe": "restic_0.20.0_windows_amd64.exe"
+}

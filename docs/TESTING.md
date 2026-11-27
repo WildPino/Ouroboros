@@ -94,3 +94,22 @@ fails or if no reclaim happened. The output is saved to `test-results\diskfull-t
 
 If the script is interrupted, detach the disk by hand: open `diskpart`, then
 `select vdisk file="<WorkDir>\disk.vhdx"` and `detach vdisk`.
+
+## Builds of Ouroboros.exe
+
+```powershell
+.\build.ps1 build             # bin\ouroboros.exe, and bin\app\Ouroboros.exe without restic
+.\build.ps1 release-snapshot  # dist\: the command line zip, Ouroboros.exe with restic, checksums
+```
+
+`release-snapshot` downloads the restic release pinned in
+`third_party/restic/restic.json` and stops if its SHA-256 differs. Both
+targets then run `Ouroboros.exe --embedded-versions`, a hidden argument that
+checks every embedded file against its recorded size and SHA-256 and prints
+its version; the build fails if any file does not match. To run it by hand,
+capture the output, since a windowed program has no console:
+
+```powershell
+$env:__COMPAT_LAYER = 'RunAsInvoker'   # only from a console that is not elevated
+.\dist\Ouroboros.exe --embedded-versions | Out-String
+```

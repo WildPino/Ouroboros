@@ -38,4 +38,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ouroboros
-          path: bin/ouroboros.exe
+          path: |
+            bin/ouroboros.exe
+            bin/app/Ouroboros.exe

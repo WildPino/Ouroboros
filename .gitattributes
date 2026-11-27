@@ -3,3 +3,4 @@
 *.zip binary
 *.exe binary
 **/testdata/** -text
+*.png binary

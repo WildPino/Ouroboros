@@ -157,13 +157,13 @@ with `--json`, and the tests cover each command and schema.
 
 ### M8.2 — Packaging
 
-- [ ] `Ouroboros.exe`: windowed build with administrator manifest, icon and
+- [x] `Ouroboros.exe`: windowed build with administrator manifest, icon and
       version information
-- [ ] Embedded `ouroboros.exe` and `restic.exe`; restic pinned by version and
+- [x] Embedded `ouroboros.exe` and `restic.exe`; restic pinned by version and
       SHA-256 in the repository, with its license
-- [ ] Release workflow publishes `Ouroboros.exe`, the command line zip and
+- [x] Release workflow publishes `Ouroboros.exe`, the command line zip and
       checksums for both
-- [ ] Development build without embedded restic
+- [x] Development build without embedded restic
 
 Done when: the release workflow produces `Ouroboros.exe`, and running it with
 a hidden diagnostic argument prints the versions of the embedded programs.

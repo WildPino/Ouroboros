@@ -32,7 +32,7 @@ jobs:
       - name: Test
         run: ./build.ps1 test
 
-      - name: Build the release zip
+      - name: Build the release files
         run: ./build.ps1 release-snapshot
 
       - name: Check the version in the binary
@@ -42,6 +42,18 @@ jobs:
           if (-not (Test-Path -LiteralPath $zip)) { throw "missing $zip; is the tag on the built commit?" }
           $got = & "dist/ouroboros_${tag}_windows_amd64/ouroboros.exe" version
           if ($got -ne "ouroboros $tag") { throw "binary reports '$got', expected 'ouroboros $tag'" }
+
+      - name: Check the programs embedded in Ouroboros.exe
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $restic = (Get-Content -Raw third_party/restic/restic.json | ConvertFrom-Json).version
+          $env:__COMPAT_LAYER = 'RunAsInvoker'
+          $report = & dist/Ouroboros.exe --embedded-versions | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "embedded file check failed:`n$report" }
+          Write-Host $report
+          foreach ($want in @("bin/ouroboros.exe\s+$([regex]::Escape($tag))\s", "restic/restic.exe\s+$([regex]::Escape($restic))\s")) {
+            if ($report -notmatch "(?m)^$want.*\sok\s*$") { throw "Ouroboros.exe does not embed $want" }
+          }
 
       - name: Release notes from the changelog
         run: |
@@ -64,5 +76,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = '${{ github.ref_name }}'
-          gh release create $tag "dist/ouroboros_${tag}_windows_amd64.zip" dist/checksums.txt `
+          gh release create $tag dist/Ouroboros.exe "dist/ouroboros_${tag}_windows_amd64.zip" dist/checksums.txt `
             --draft --verify-tag --title "Ouroboros $tag" --notes-file dist/notes.md
