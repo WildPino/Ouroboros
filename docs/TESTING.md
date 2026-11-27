@@ -113,3 +113,96 @@ capture the output, since a windowed program has no console:
 $env:__COMPAT_LAYER = 'RunAsInvoker'   # only from a console that is not elevated
 .\dist\Ouroboros.exe --embedded-versions | Out-String
 ```
+
+## Install, update and uninstall by hand
+
+The tests of `internal/setup` run setup in temporary folders and a registry
+key below `HKEY_CURRENT_USER`. The real installation, with the UAC prompt,
+Program Files, the machine `PATH` and "Installed apps", is checked by hand.
+Use a virtual machine, Windows Sandbox or a spare computer, never the
+computer whose backups matter, and a test repository on a test drive or
+folder.
+
+Build two versions from two different commits, so that the second is newer:
+
+```powershell
+.\build.ps1 release-snapshot; Copy-Item dist\Ouroboros.exe Ouroboros-old.exe
+# commit something, then
+.\build.ps1 release-snapshot; Copy-Item dist\Ouroboros.exe Ouroboros-new.exe
+```
+
+Copy both to the test machine. The command lines below run in an
+Administrator PowerShell unless they say otherwise.
+
+1. **Install.** Double-click `Ouroboros-old.exe` from Explorer: Windows asks
+   for administrator rights and shows the icon; the message says the window
+   is not part of this build. Then run `.\Ouroboros-old.exe install` and
+   confirm. Check:
+   - `C:\Program Files\Ouroboros` holds `Ouroboros.exe`, `LICENSE`,
+     `bin\ouroboros.exe`, `restic\restic.exe` and `restic\LICENSE`, and
+     nothing ending in `.old` or `.new`;
+   - the Start menu has "Ouroboros", which opens the same message;
+   - Settings, Apps, "Installed apps" lists Ouroboros with its version,
+     publisher and size;
+   - in a new terminal that is not elevated, `ouroboros version` prints the
+     version, `where.exe ouroboros` finds only `bin\ouroboros.exe`, and
+     `where.exe restic` does not list the Ouroboros folder;
+   - `icacls C:\ProgramData\Ouroboros` lists only `NT AUTHORITY\SYSTEM` and
+     `BUILTIN\Administrators`.
+2. **Configure and schedule.** Create the configuration with
+   `ouroboros config init > C:\ProgramData\Ouroboros\ouroboros.toml`, set the
+   test repository and one job in it, and run
+   `ouroboros config validate`. Run `.\Ouroboros-old.exe install` again: the
+   same version repairs the installation, and because the configuration was
+   edited by hand and has no `restic_path`, the final message asks to set
+   `restic_path = 'C:\Program Files\Ouroboros\restic\restic.exe'`, without
+   changing the file. Set it, then run `ouroboros init`,
+   `ouroboros run --force` and `ouroboros install`. `ouroboros status` shows
+   the backup and the task.
+3. **Update while a backup runs.** Start `ouroboros run --force` in one
+   terminal and, while it runs, `.\Ouroboros-new.exe install` in another:
+   setup asks to retry until the backup ends, then updates. Check that the
+   message mentions the scheduled task, that `ouroboros version` prints the
+   new version, that "Installed apps" shows it, and that
+   `schtasks /Query /TN \Ouroboros\Tick /XML` still runs
+   `C:\Program Files\Ouroboros\bin\ouroboros.exe`.
+4. **Update while the installed program runs.** Open "Ouroboros" from the
+   Start menu and leave its message open; run `.\Ouroboros-new.exe install`
+   again. The message says that replaced files are deleted at the next
+   restart; `Ouroboros.exe.old` is in the program folder until then, and is
+   gone after a restart.
+5. **Refuse an older version.** `.\Ouroboros-old.exe install` must refuse,
+   saying that a newer version is installed, and change nothing.
+6. **Pause survives an update.** `ouroboros pause`, then
+   `.\Ouroboros-new.exe install`: `ouroboros status` still says paused. Run
+   `ouroboros resume`.
+7. **Uninstall, keeping the data.** From Settings, Apps, "Installed apps",
+   uninstall Ouroboros: Windows asks for administrator rights; answer Yes to
+   removing Ouroboros and No to removing the configuration. Check that the
+   task is gone (`schtasks /Query /TN \Ouroboros\Tick` fails), the Start menu
+   entry is gone, a new terminal no longer finds `ouroboros`, and
+   `C:\ProgramData\Ouroboros` and the test repository are still there. The
+   message says that some files go at the next restart; restart, and
+   `C:\Program Files\Ouroboros` is gone.
+8. **Reinstall, then uninstall everything.** `.\Ouroboros-new.exe install`;
+   the configuration is used again (`ouroboros status`). Uninstall with
+   `& 'C:\Program Files\Ouroboros\Ouroboros.exe' uninstall`, answering Yes
+   twice, and restart. Nothing may be left:
+   - `C:\Program Files\Ouroboros` and `C:\ProgramData\Ouroboros`;
+   - the key
+     `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Ouroboros`;
+   - the `bin` folder in the machine `PATH`
+     (`[Environment]::GetEnvironmentVariable('Path', 'Machine')`);
+   - the Start menu entry and the task;
+   - the Event Log source
+     `HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\Ouroboros`.
+
+   The test repository must still be there, with its snapshots
+   (`restic -r <repository> snapshots`, with the written-down password).
+9. **Version 0.1.0 installed by hand.** On a machine where version 0.1.0 runs
+   from `C:\Program Files\Ouroboros\ouroboros.exe` with its scheduled task,
+   run `.\Ouroboros-new.exe install`. The old `ouroboros.exe` is replaced by
+   `Ouroboros.exe` (the same name for Windows), the message says that the
+   scheduled task now runs the installed command line, and the task XML
+   names `bin\ouroboros.exe`. The next scheduled run succeeds
+   (`ouroboros status`).

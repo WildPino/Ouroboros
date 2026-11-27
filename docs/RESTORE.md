@@ -82,10 +82,12 @@ On the original machine, while the configuration folder is intact, Ouroboros
 can still supply it from an Administrator console:
 
 ```powershell
-$env:RESTIC_PASSWORD_COMMAND = '"C:\Program Files\Ouroboros\ouroboros.exe" internal password'
+$env:RESTIC_PASSWORD_COMMAND = '"C:\Program Files\Ouroboros\bin\ouroboros.exe" internal password'
 ```
 
-Use the path where `ouroboros.exe` is installed; add
+Use the path where `ouroboros.exe` is installed: `Ouroboros.exe` puts it in
+`C:\Program Files\Ouroboros\bin`, while version 0.1.0 was copied by hand,
+usually straight into `C:\Program Files\Ouroboros`. Add
 `--config <path>` after `password` if the configuration is not in
 `C:\ProgramData\Ouroboros\ouroboros.toml`. The stored copy of the password is
 encrypted for that Windows installation only: after a reinstall, or on
