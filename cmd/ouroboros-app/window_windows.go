@@ -18,7 +18,7 @@ func runWindow() int {
 		message("Ouroboros cannot start: "+err.Error(), windows.MB_ICONERROR)
 		return exitError
 	}
-	dataPath, err := setup.PrepareWebViewDir(tgt)
+	dataPath, err := gui.DataPath()
 	if err != nil {
 		message("Ouroboros cannot start: "+err.Error(), windows.MB_ICONERROR)
 		return exitError

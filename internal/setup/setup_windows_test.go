@@ -708,32 +708,27 @@ func TestDataDirOwner(t *testing.T) {
 	}
 }
 
-func TestPrepareWebViewDir(t *testing.T) {
-	e := newEnv(t)
-	dir, err := PrepareWebViewDir(e.tgt)
-	if err != nil || dir != filepath.Join(e.tgt.DataDir, "WebView2") {
-		t.Fatalf("PrepareWebViewDir = %q, %v", dir, err)
+// ownedBy reports whether path, not following a link, is owned by sid.
+func ownedBy(path string, sid *windows.SID) (bool, error) {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return false, err
 	}
-	if _, err := os.Stat(e.tgt.DataDir); err != nil {
-		t.Fatalf("data folder not created: %v", err)
+	h, err := windows.CreateFile(p, windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
+	if err != nil {
+		return false, fmt.Errorf("check the owner of %s: %w", path, err)
 	}
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		t.Fatal(err)
+	defer windows.CloseHandle(h)
+	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		return false, fmt.Errorf("check the owner of %s: %w", path, err)
 	}
-	if got, err := PrepareWebViewDir(e.tgt); err != nil || got != dir {
-		t.Errorf("own folder: %q, %v", got, err)
+	owner, _, err := sd.Owner()
+	if err != nil {
+		return false, fmt.Errorf("check the owner of %s: %w", path, err)
 	}
-
-	// A folder owned by anyone else is refused. Without administrator
-	// rights a test cannot give a folder away, so the expected owner
-	// changes instead.
-	err = checkOwner(dir, mustSID(t, windows.WinLocalSystemSid))
-	if err == nil || !strings.Contains(err.Error(), "belongs to another account") {
-		t.Errorf("folder of another owner: %v", err)
-	}
-	if err := checkOwner(filepath.Join(e.tgt.DataDir, "missing"), mustSID(t, windows.WinLocalSystemSid)); err != nil {
-		t.Errorf("missing folder: %v", err)
-	}
+	return owner != nil && owner.Equals(sid), nil
 }
 
 func mustSID(t *testing.T, kind windows.WELL_KNOWN_SID_TYPE) *windows.SID {

@@ -46,10 +46,6 @@ type Target struct {
 // and its creator, as owner, could otherwise give itself access again.
 const DataDirSDDL = "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
 
-// webViewDirName is the WebView2 user data folder of the window, in
-// DataDir (DESIGN.md §12.6).
-const webViewDirName = "WebView2"
-
 // ConfigName is the configuration file in DataDir, as the command line
 // expects it.
 const ConfigName = "ouroboros.toml"
@@ -219,70 +215,6 @@ func restrictDir(dir, sddl string) error {
 		return fmt.Errorf("restrict %s: %w", dir, err)
 	}
 	return nil
-}
-
-// PrepareWebViewDir returns the window's WebView2 user data folder inside
-// DataDir, after restricting DataDir as setup does; the window may run
-// before setup. A user data folder that exists but belongs to another owner
-// than the one DataDirSDDL names was not made by the elevated window, so it
-// is refused rather than used.
-func PrepareWebViewDir(t Target) (string, error) {
-	if err := restrictDir(t.DataDir, t.DataDirSDDL); err != nil {
-		return "", err
-	}
-	dir := filepath.Join(t.DataDir, webViewDirName)
-	sd, err := windows.SecurityDescriptorFromString(t.DataDirSDDL)
-	if err != nil {
-		return "", fmt.Errorf("security descriptor: %w", err)
-	}
-	want, _, err := sd.Owner()
-	if err != nil {
-		return "", fmt.Errorf("security descriptor: %w", err)
-	}
-	if want != nil {
-		if err := checkOwner(dir, want); err != nil {
-			return "", err
-		}
-	}
-	return dir, nil
-}
-
-// checkOwner fails if path exists and is not owned by want.
-func checkOwner(path string, want *windows.SID) error {
-	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	ok, err := ownedBy(path, want)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("%s belongs to another account; delete it and open Ouroboros again", path)
-	}
-	return nil
-}
-
-// ownedBy reports whether path, not following a link, is owned by sid.
-func ownedBy(path string, sid *windows.SID) (bool, error) {
-	p, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return false, err
-	}
-	h, err := windows.CreateFile(p, windows.READ_CONTROL, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
-		nil, windows.OPEN_EXISTING, windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT, 0)
-	if err != nil {
-		return false, fmt.Errorf("check the owner of %s: %w", path, err)
-	}
-	defer windows.CloseHandle(h)
-	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
-	if err != nil {
-		return false, fmt.Errorf("check the owner of %s: %w", path, err)
-	}
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return false, fmt.Errorf("check the owner of %s: %w", path, err)
-	}
-	return owner != nil && owner.Equals(sid), nil
 }
 
 // CleanOld deletes the NAME.old files that an update leaves when it

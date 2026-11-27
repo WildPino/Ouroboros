@@ -271,7 +271,6 @@ Stored in `%ProgramData%\Ouroboros\`:
 | `state.json` | per job: last attempt, last success, last error; maintenance timestamps |
 | `history.jsonl` | one line per backup/reclaim/prune/check with stats (used by the predictor and `status`) |
 | `logs\` | rotated log files |
-| `WebView2\` | the window's browser data (§12.6) |
 
 All writes to `state.json` are atomic (write temp file, flush, rename).
 `history.jsonl` is append-only; corrupted trailing lines are ignored on read.
@@ -484,6 +483,14 @@ Ouroboros deviates from this on purpose and removes the way in instead:
   (§12.8, question 7), each of which validates its arguments; there is no
   generic "run this command" call.
 
+The browser itself does not run elevated: WebView2 starts it as the
+desktop's account without administrator rights, whatever the host's rights
+(§12.6). The elevated part is the Go side, reached only through the bridge.
+A program the user runs without elevation can control that browser, so the
+bridge is treated as reachable by such programs: no call may do more than
+the window's screens let the user do, and none may change what the
+scheduled task runs as SYSTEM.
+
 Because the window runs elevated, "the user who opened the program" (§12.1)
 is taken from the Explorer process of the session, not from the elevated
 token, so that Documents and Desktop are the right ones when another
@@ -618,13 +625,19 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
   the first time and about 1.5 s after that, elevated or not; the window
   executable is 3.3 MB; the user data folder grows to about 5 MB. The folder
   picker works elevated, for other drives and for the user's own folders.
-- WebView2 user data folder: `C:\ProgramData\Ouroboros\WebView2`, never
-  next to the executable in Program Files, and not in the user's
-  `%LOCALAPPDATA%`, where any program the user runs without elevation could
-  change the data of the elevated browser. The window restricts
-  `C:\ProgramData\Ouroboros` as setup does before using it, since it runs
-  before the first setup, and refuses a `WebView2` folder that Administrators
-  do not own: the elevated window did not create it.
+- WebView2 never runs elevated: for an elevated window the runtime starts
+  the browser processes through Explorer, as the account of the desktop
+  and without administrator rights. Only the Go side of the window is
+  elevated, and the bridge is the boundary between the two; a program the
+  user runs without elevation can reach the browser, so it can make any
+  call of the contract, and no call may give it more than the window's own
+  screens do.
+- WebView2 user data folder: `%LOCALAPPDATA%\Ouroboros\WebView2` of the
+  account that runs the desktop shell, which is the account of the browser,
+  also when the window was elevated with another account's credentials;
+  never next to the executable in Program Files. A folder in
+  `C:\ProgramData\Ouroboros`, writable only by Administrators, cannot be
+  used: the browser cannot write it.
 - The browser is created in the hidden window and starts hidden like it; it
   is made visible when the window is shown, hidden while the window is
   minimized, and the window test checks that it is visible and fills the
@@ -738,8 +751,9 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    picker starts in that profile. Checked on the prototype for the same
    account; the different-account case is part of the owner's manual test
    in M8.5. If the shell is not running, the window falls back to its own
-   folders and says so. The WebView2 user data folder is in
-   `C:\ProgramData\Ouroboros`, whatever account the window runs as (§12.6).
+   folders and says so. The WebView2 user data folder belongs to the
+   account of the shell too, since the browser runs as that account
+   (§12.6).
 6. Interface language. Settled: English only in 0.2.0. Every string the
    page shows lives in one table, so a translation can be added later
    without touching the screens.
