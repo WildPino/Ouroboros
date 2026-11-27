@@ -137,7 +137,7 @@ The example shows the `data` field of the result line.
       "job": "docs",
       "pinned": false,
       "hostname": "pc",
-      "paths": ["C:\Users\name\Documents"],
+      "paths": ["C:\\Users\\name\\Documents"],
       "files": 3,
       "size_bytes": 300013
     }
@@ -163,7 +163,7 @@ without `--json`.
 ```json
 {
   "checks": [
-    {"name": "config", "status": "ok", "detail": "C:\ProgramData\Ouroboros\ouroboros.toml"},
+    {"name": "config", "status": "ok", "detail": "C:\\ProgramData\\Ouroboros\\ouroboros.toml"},
     {"name": "admin", "status": "warn", "detail": "not running as Administrator; VSS and the scheduled task need it"}
   ]
 }
