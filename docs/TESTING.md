@@ -143,7 +143,7 @@ Administrator PowerShell unless they say otherwise.
      nothing ending in `.old` or `.new`;
    - the Start menu has "Ouroboros", which opens the same message;
    - Settings, Apps, "Installed apps" lists Ouroboros with its version,
-     publisher and size;
+     the publisher "SirProjects" and its size;
    - in a new terminal that is not elevated, `ouroboros version` prints the
      version, `where.exe ouroboros` finds only `bin\ouroboros.exe`, and
      `where.exe restic` does not list the Ouroboros folder;

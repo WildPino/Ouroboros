@@ -363,7 +363,7 @@ func (in *Installer) register(size int64) error {
 	for _, v := range []struct{ name, value string }{
 		{"DisplayName", "Ouroboros"},
 		{"DisplayVersion", strings.TrimPrefix(in.Version, "v")},
-		{"Publisher", "Giorgio Alessandrini"},
+		{"Publisher", "SirProjects"},
 		{"InstallLocation", in.ProgramDir},
 		{"DisplayIcon", app + ",0"},
 		{"UninstallString", `"` + app + `" uninstall`},
