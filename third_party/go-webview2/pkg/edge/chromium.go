@@ -1,12 +1,10 @@
 //go:build windows
-// +build windows
 
 package edge
 
 import (
-	"log"
-	"os"
-	"path/filepath"
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"unsafe"
 
@@ -14,12 +12,17 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Chromium hosts one WebView2 controller in a window. Everything the page
+// can reach is denied unless a callback allows it: navigations, web
+// messages and resource requests need their callbacks, popups and downloads
+// are always refused, and every permission request is denied.
 type Chromium struct {
 	hwnd                  uintptr
 	focusOnInit           bool
 	controller            *ICoreWebView2Controller
 	webview               *ICoreWebView2
 	inited                uintptr
+	initErr               error
 	envCompleted          *iCoreWebView2CreateCoreWebView2EnvironmentCompletedHandler
 	controllerCompleted   *iCoreWebView2CreateCoreWebView2ControllerCompletedHandler
 	webMessageReceived    *iCoreWebView2WebMessageReceivedEventHandler
@@ -27,21 +30,32 @@ type Chromium struct {
 	webResourceRequested  *iCoreWebView2WebResourceRequestedEventHandler
 	acceleratorKeyPressed *ICoreWebView2AcceleratorKeyPressedEventHandler
 	navigationCompleted   *ICoreWebView2NavigationCompletedEventHandler
+	navigationStarting    *navigationStartingHandler
+	newWindowRequested    *newWindowRequestedHandler
+	downloadStarting      *downloadStartingHandler
 
 	environment *ICoreWebView2Environment
 
-	// Settings
+	// DataPath is the WebView2 user data folder. It must be set.
 	DataPath string
 
-	// permissions
-	permissions      map[CoreWebView2PermissionKind]CoreWebView2PermissionState
-	globalPermission *CoreWebView2PermissionState
-
-	// Callbacks
-	MessageCallback              func(string)
+	// NavigationAllowed decides whether the top-level document or a frame
+	// may navigate to uri. Without it every navigation is cancelled.
+	NavigationAllowed func(uri string) bool
+	// MessageCallback receives the web messages whose source document
+	// MessageSourceAllowed accepts. Without MessageSourceAllowed every
+	// message is dropped.
+	MessageCallback      func(message string)
+	MessageSourceAllowed func(uri string) bool
+	// WebResourceRequestedCallback answers the requests that match the
+	// filters. A request it leaves without a response gets 403.
 	WebResourceRequestedCallback func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
-	NavigationCompletedCallback  func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
-	AcceleratorKeyCallback       func(uint) bool
+	// Refused reports a navigation, popup, download, message or permission
+	// that was refused, for logging. It may be nil.
+	Refused func(what, uri string)
+
+	NavigationCompletedCallback func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
+	AcceleratorKeyCallback      func(uint) bool
 }
 
 func NewChromium() *Chromium {
@@ -64,53 +78,46 @@ func NewChromium() *Chromium {
 	e.webResourceRequested = newICoreWebView2WebResourceRequestedEventHandler(e)
 	e.acceleratorKeyPressed = newICoreWebView2AcceleratorKeyPressedEventHandler(e)
 	e.navigationCompleted = newICoreWebView2NavigationCompletedEventHandler(e)
-	e.permissions = make(map[CoreWebView2PermissionKind]CoreWebView2PermissionState)
-
+	e.navigationStarting = &navigationStartingHandler{vtbl: &navigationStartingFn, e: e}
+	e.newWindowRequested = &newWindowRequestedHandler{vtbl: &newWindowRequestedFn, e: e}
+	e.downloadStarting = &downloadStartingHandler{vtbl: &downloadStartingFn, e: e}
 	return e
 }
 
-func (e *Chromium) Embed(hwnd uintptr) bool {
+// Embed creates the browser in hwnd and waits, running the message loop of
+// the calling thread, until it is ready or has failed.
+func (e *Chromium) Embed(hwnd uintptr) error {
 	e.hwnd = hwnd
-
-	dataPath := e.DataPath
-	if dataPath == "" {
-		currentExePath := make([]uint16, windows.MAX_PATH)
-		_, err := windows.GetModuleFileName(windows.Handle(0), &currentExePath[0], windows.MAX_PATH)
-		if err != nil {
-			// What to do here?
-			return false
-		}
-		currentExeName := filepath.Base(windows.UTF16ToString(currentExePath))
-		dataPath = filepath.Join(os.Getenv("AppData"), currentExeName)
+	if e.DataPath == "" {
+		return errors.New("no WebView2 user data folder")
 	}
-
-	res, err := createCoreWebView2EnvironmentWithOptions(nil, windows.StringToUTF16Ptr(dataPath), 0, e.envCompleted)
+	dataPath, err := windows.UTF16PtrFromString(e.DataPath)
 	if err != nil {
-		log.Printf("Error calling Webview2Loader: %v", err)
-		return false
-	} else if res != 0 {
-		log.Printf("Result: %08x", res)
-		return false
+		return err
+	}
+	res, err := createCoreWebView2EnvironmentWithOptions(nil, dataPath, 0, e.envCompleted)
+	if err != nil {
+		return err
+	}
+	if res != 0 {
+		return fmt.Errorf("creating the WebView2 environment failed with %08x", uint32(res))
 	}
 	var msg w32.Msg
-	for {
-		if atomic.LoadUintptr(&e.inited) != 0 {
-			break
-		}
-		r, _, _ := w32.User32GetMessageW.Call(
-			uintptr(unsafe.Pointer(&msg)),
-			0,
-			0,
-			0,
-		)
-		if r == 0 {
-			break
+	for atomic.LoadUintptr(&e.inited) == 0 {
+		r, _, _ := w32.User32GetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if r == 0 || int32(r) == -1 {
+			return errors.New("the window closed before WebView2 was ready")
 		}
 		_, _, _ = w32.User32TranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		_, _, _ = w32.User32DispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
-	e.Init("window.external={invoke:s=>window.chrome.webview.postMessage(s)}")
-	return true
+	return e.initErr
+}
+
+func (e *Chromium) fail(err error) uintptr {
+	e.initErr = err
+	atomic.StoreUintptr(&e.inited, 1)
+	return 0
 }
 
 func (e *Chromium) Navigate(url string) {
@@ -138,14 +145,27 @@ func (e *Chromium) Init(script string) {
 func (e *Chromium) Eval(script string) {
 	_script, err := windows.UTF16PtrFromString(script)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
-
 	_, _, _ = e.webview.vtbl.ExecuteScript.Call(
 		uintptr(unsafe.Pointer(e.webview)),
 		uintptr(unsafe.Pointer(_script)),
 		0,
 	)
+}
+
+// PostWebMessageAsJSON sends json to the page, which receives it parsed as
+// the data of a message event. It must be called on the window's thread.
+func (e *Chromium) PostWebMessageAsJSON(json string) error {
+	s, err := windows.UTF16PtrFromString(json)
+	if err != nil {
+		return err
+	}
+	hr, _, _ := e.webview.vtbl.PostWebMessageAsJSON.Call(
+		uintptr(unsafe.Pointer(e.webview)),
+		uintptr(unsafe.Pointer(s)),
+	)
+	return hresult("PostWebMessageAsJSON", hr)
 }
 
 func (e *Chromium) Show() error {
@@ -156,8 +176,11 @@ func (e *Chromium) Hide() error {
 	return e.controller.PutIsVisible(false)
 }
 
+// QueryInterface, AddRef and Release are not used for the handlers, which
+// answer QueryInterface themselves (queryHandler); the handlers live as
+// long as the Chromium.
 func (e *Chromium) QueryInterface(_, _ uintptr) uintptr {
-	return 0
+	return eNoInterface
 }
 
 func (e *Chromium) AddRef() uintptr {
@@ -169,131 +192,195 @@ func (e *Chromium) Release() uintptr {
 }
 
 func (e *Chromium) EnvironmentCompleted(res uintptr, env *ICoreWebView2Environment) uintptr {
-	if int64(res) < 0 {
-		log.Fatalf("Creating environment failed with %08x", res)
+	if int32(res) < 0 || env == nil {
+		return e.fail(fmt.Errorf("creating the WebView2 environment failed with %08x", uint32(res)))
 	}
 	_, _, _ = env.vtbl.AddRef.Call(uintptr(unsafe.Pointer(env)))
 	e.environment = env
 
-	_, _, _ = env.vtbl.CreateCoreWebView2Controller.Call(
+	hr, _, _ := env.vtbl.CreateCoreWebView2Controller.Call(
 		uintptr(unsafe.Pointer(env)),
 		e.hwnd,
 		uintptr(unsafe.Pointer(e.controllerCompleted)),
 	)
+	if int32(hr) < 0 {
+		return e.fail(fmt.Errorf("creating the WebView2 controller failed with %08x", uint32(hr)))
+	}
 	return 0
 }
 
 func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller *ICoreWebView2Controller) uintptr {
-	if int64(res) < 0 {
-		log.Fatalf("Creating controller failed with %08x", res)
+	if int32(res) < 0 || controller == nil {
+		return e.fail(fmt.Errorf("creating the WebView2 controller failed with %08x", uint32(res)))
 	}
 	_, _, _ = controller.vtbl.AddRef.Call(uintptr(unsafe.Pointer(controller)))
 	e.controller = controller
 
-	var token _EventRegistrationToken
-	_, _, _ = controller.vtbl.GetCoreWebView2.Call(
+	hr, _, _ := controller.vtbl.GetCoreWebView2.Call(
 		uintptr(unsafe.Pointer(controller)),
 		uintptr(unsafe.Pointer(&e.webview)),
 	)
-	_, _, _ = e.webview.vtbl.AddRef.Call(
-		uintptr(unsafe.Pointer(e.webview)),
-	)
-	_, _, _ = e.webview.vtbl.AddWebMessageReceived.Call(
-		uintptr(unsafe.Pointer(e.webview)),
-		uintptr(unsafe.Pointer(e.webMessageReceived)),
-		uintptr(unsafe.Pointer(&token)),
-	)
-	_, _, _ = e.webview.vtbl.AddPermissionRequested.Call(
-		uintptr(unsafe.Pointer(e.webview)),
-		uintptr(unsafe.Pointer(e.permissionRequested)),
-		uintptr(unsafe.Pointer(&token)),
-	)
-	_, _, _ = e.webview.vtbl.AddWebResourceRequested.Call(
-		uintptr(unsafe.Pointer(e.webview)),
-		uintptr(unsafe.Pointer(e.webResourceRequested)),
-		uintptr(unsafe.Pointer(&token)),
-	)
-	_, _, _ = e.webview.vtbl.AddNavigationCompleted.Call(
-		uintptr(unsafe.Pointer(e.webview)),
-		uintptr(unsafe.Pointer(e.navigationCompleted)),
-		uintptr(unsafe.Pointer(&token)),
-	)
-
-	_ = e.controller.AddAcceleratorKeyPressed(e.acceleratorKeyPressed, &token)
+	if int32(hr) < 0 || e.webview == nil {
+		return e.fail(fmt.Errorf("getting the WebView2 failed with %08x", uint32(hr)))
+	}
+	// The getter already added a reference for the caller.
+	if err := e.register(); err != nil {
+		return e.fail(err)
+	}
+	_ = e.controller.AddAcceleratorKeyPressed(e.acceleratorKeyPressed, new(_EventRegistrationToken))
 
 	atomic.StoreUintptr(&e.inited, 1)
-
 	if e.focusOnInit {
 		e.Focus()
 	}
-
 	return 0
+}
+
+// register adds every event handler and hardens the settings. The page is
+// not loaded until this has succeeded, so a failure stops the window.
+func (e *Chromium) register() error {
+	var token _EventRegistrationToken
+	v := e.webview.vtbl
+	steps := []struct {
+		name    string
+		proc    ComProc
+		handler unsafe.Pointer
+	}{
+		{"add_NavigationStarting", v.AddNavigationStarting, unsafe.Pointer(e.navigationStarting)},
+		{"add_FrameNavigationStarting", v.AddFrameNavigationStarting, unsafe.Pointer(e.navigationStarting)},
+		{"add_NewWindowRequested", v.AddNewWindowRequested, unsafe.Pointer(e.newWindowRequested)},
+		{"add_PermissionRequested", v.AddPermissionRequested, unsafe.Pointer(e.permissionRequested)},
+		{"add_WebMessageReceived", v.AddWebMessageReceived, unsafe.Pointer(e.webMessageReceived)},
+		{"add_WebResourceRequested", v.AddWebResourceRequested, unsafe.Pointer(e.webResourceRequested)},
+		{"add_NavigationCompleted", v.AddNavigationCompleted, unsafe.Pointer(e.navigationCompleted)},
+	}
+	for _, s := range steps {
+		hr, _, _ := s.proc.Call(
+			uintptr(unsafe.Pointer(e.webview)),
+			uintptr(s.handler),
+			uintptr(unsafe.Pointer(&token)),
+		)
+		if err := hresult(s.name, hr); err != nil {
+			return err
+		}
+	}
+	if err := e.addDownloadStarting(); err != nil {
+		return err
+	}
+	return e.hardenSettings()
 }
 
 func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *iCoreWebView2WebMessageReceivedEventArgs) uintptr {
+	source := messageSource(args)
+	if e.MessageSourceAllowed == nil || !e.MessageSourceAllowed(source) {
+		e.refused("message", source)
+		return 0
+	}
 	var message *uint16
-	_, _, _ = args.vtbl.TryGetWebMessageAsString.Call(
+	hr, _, _ := args.vtbl.TryGetWebMessageAsString.Call(
 		uintptr(unsafe.Pointer(args)),
 		uintptr(unsafe.Pointer(&message)),
 	)
-	if e.MessageCallback != nil {
-		e.MessageCallback(w32.Utf16PtrToString(message))
+	if int32(hr) < 0 || message == nil {
+		e.refused("message that is not a string", source)
+		return 0
 	}
-	_, _, _ = sender.vtbl.PostWebMessageAsString.Call(
-		uintptr(unsafe.Pointer(sender)),
-		uintptr(unsafe.Pointer(message)),
-	)
+	text := windows.UTF16PtrToString(message)
 	windows.CoTaskMemFree(unsafe.Pointer(message))
+	if e.MessageCallback != nil {
+		e.MessageCallback(text)
+	}
 	return 0
 }
 
-func (e *Chromium) SetPermission(kind CoreWebView2PermissionKind, state CoreWebView2PermissionState) {
-	e.permissions[kind] = state
-}
-
-func (e *Chromium) SetGlobalPermission(state CoreWebView2PermissionState) {
-	e.globalPermission = &state
-}
-
+// PermissionRequested denies every permission: clipboard, camera,
+// microphone, location, notifications and any kind added later.
 func (e *Chromium) PermissionRequested(_ *ICoreWebView2, args *iCoreWebView2PermissionRequestedEventArgs) uintptr {
 	var kind CoreWebView2PermissionKind
 	_, _, _ = args.vtbl.GetPermissionKind.Call(
 		uintptr(unsafe.Pointer(args)),
-		uintptr(kind),
+		uintptr(unsafe.Pointer(&kind)),
 	)
-	var result CoreWebView2PermissionState
-	if e.globalPermission != nil {
-		result = *e.globalPermission
-	} else {
-		var ok bool
-		result, ok = e.permissions[kind]
-		if !ok {
-			result = CoreWebView2PermissionStateDefault
-		}
-	}
 	_, _, _ = args.vtbl.PutState.Call(
 		uintptr(unsafe.Pointer(args)),
-		uintptr(result),
+		uintptr(CoreWebView2PermissionStateDeny),
 	)
+	e.refused(fmt.Sprintf("permission %d", kind), "")
 	return 0
 }
 
 func (e *Chromium) WebResourceRequested(sender *ICoreWebView2, args *ICoreWebView2WebResourceRequestedEventArgs) uintptr {
-	req, err := args.GetRequest()
-	if err != nil {
-		log.Fatal(err)
+	var req *ICoreWebView2WebResourceRequest
+	hr, _, _ := args.vtbl.GetRequest.Call(uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(&req)))
+	if int32(hr) >= 0 && req != nil {
+		defer req.vtbl.Release.Call(uintptr(unsafe.Pointer(req)))
+		if e.WebResourceRequestedCallback != nil {
+			e.WebResourceRequestedCallback(req, args)
+		}
 	}
-	if e.WebResourceRequestedCallback != nil {
-		e.WebResourceRequestedCallback(req, args)
+	var resp *ICoreWebView2WebResourceResponse
+	hr, _, _ = args.vtbl.GetResponse.Call(uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(&resp)))
+	if int32(hr) >= 0 && resp != nil {
+		_, _, _ = resp.vtbl.Release.Call(uintptr(unsafe.Pointer(resp)))
+		return 0
 	}
+	// Nothing answered: refuse rather than let the request go out.
+	uri := ""
+	if req != nil {
+		uri, _ = RequestURI(req)
+	}
+	e.refused("request", uri)
+	_ = e.Respond(args, nil, 403, "Forbidden", "Content-Type: text/plain")
 	return 0
 }
 
-func (e *Chromium) AddWebResourceRequestedFilter(filter string, ctx COREWEBVIEW2_WEB_RESOURCE_CONTEXT) {
-	err := e.webview.AddWebResourceRequestedFilter(filter, ctx)
-	if err != nil {
-		log.Fatal(err)
+// Respond answers a request seen by WebResourceRequestedCallback.
+func (e *Chromium) Respond(args *ICoreWebView2WebResourceRequestedEventArgs, content []byte, statusCode int, reasonPhrase, headers string) error {
+	var stream uintptr
+	if len(content) > 0 {
+		var err error
+		stream, err = w32.SHCreateMemStream(content)
+		if err != nil {
+			return err
+		}
+		defer releaseStream(stream)
 	}
+	reason, err := windows.UTF16PtrFromString(reasonPhrase)
+	if err != nil {
+		return err
+	}
+	h, err := windows.UTF16PtrFromString(headers)
+	if err != nil {
+		return err
+	}
+	var response *ICoreWebView2WebResourceResponse
+	hr, _, _ := e.environment.vtbl.CreateWebResourceResponse.Call(
+		uintptr(unsafe.Pointer(e.environment)),
+		stream,
+		uintptr(statusCode),
+		uintptr(unsafe.Pointer(reason)),
+		uintptr(unsafe.Pointer(h)),
+		uintptr(unsafe.Pointer(&response)),
+	)
+	if err := hresult("CreateWebResourceResponse", hr); err != nil {
+		return err
+	}
+	defer response.vtbl.Release.Call(uintptr(unsafe.Pointer(response)))
+	hr, _, _ = args.vtbl.PutResponse.Call(uintptr(unsafe.Pointer(args)), uintptr(unsafe.Pointer(response)))
+	return hresult("put_Response", hr)
+}
+
+func (e *Chromium) AddWebResourceRequestedFilter(filter string, ctx COREWEBVIEW2_WEB_RESOURCE_CONTEXT) error {
+	f, err := windows.UTF16PtrFromString(filter)
+	if err != nil {
+		return err
+	}
+	hr, _, _ := e.webview.vtbl.AddWebResourceRequestedFilter.Call(
+		uintptr(unsafe.Pointer(e.webview)),
+		uintptr(unsafe.Pointer(f)),
+		uintptr(ctx),
+	)
+	return hresult("AddWebResourceRequestedFilter", hr)
 }
 
 func (e *Chromium) Environment() *ICoreWebView2Environment {
@@ -319,10 +406,6 @@ func (e *Chromium) AcceleratorKeyPressed(sender *ICoreWebView2Controller, args *
 	}
 	_ = args.PutHandled(false)
 	return 0
-}
-
-func (e *Chromium) GetSettings() (*ICoreWebViewSettings, error) {
-	return e.webview.GetSettings()
 }
 
 func (e *Chromium) GetController() *ICoreWebView2Controller {
@@ -358,4 +441,10 @@ func (e *Chromium) Focus() {
 		return
 	}
 	_ = e.controller.MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC)
+}
+
+func (e *Chromium) refused(what, uri string) {
+	if e.Refused != nil {
+		e.Refused(what, uri)
+	}
 }

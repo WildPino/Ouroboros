@@ -2,7 +2,11 @@
 
 package webview2
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/WildPino/ouroboros/third_party/go-webview2/pkg/edge"
+)
 
 // This is copied from webview/webview.
 // The documentation is included for convenience.
@@ -74,13 +78,9 @@ type WebView interface {
 	// to receive notifications about the results of the evaluation.
 	Eval(js string)
 
-	// Bind binds a callback function so that it will appear under the given name
-	// as a global JavaScript function. Internally it uses webview_init().
-	// Callback receives a request string and a user-provided argument pointer.
-	// Request string is a JSON array of all the arguments passed to the
-	// JavaScript function.
-	//
-	// f must be a function
-	// f must return either value and error or just error
-	Bind(name string, f interface{}) error
+	// Chromium returns the browser, to set its callbacks and filters.
+	Chromium() *edge.Chromium
+
+	// HWND returns the native window handle.
+	HWND() uintptr
 }

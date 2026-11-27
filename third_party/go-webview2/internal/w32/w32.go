@@ -70,8 +70,10 @@ const (
 )
 
 const (
-	SystemMetricsCxIcon = 11
-	SystemMetricsCyIcon = 12
+	SystemMetricsCxIcon   = 11
+	SystemMetricsCyIcon   = 12
+	SystemMetricsCxSmIcon = 49
+	SystemMetricsCySmIcon = 50
 )
 
 const (
