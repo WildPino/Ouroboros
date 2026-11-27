@@ -177,7 +177,7 @@ a hidden diagnostic argument prints the versions of the embedded programs.
 - [x] Uninstall, including self-removal; configuration and password only on
       request; never the repository
 - [x] Tests in temporary folders and a test registry key
-- [ ] Manual procedure in `docs/TESTING.md`, run by the owner on a real
+- [x] Manual procedure in `docs/TESTING.md`, run by the owner on a real
       machine
 
 Done when: install, update and uninstall pass the tests and the owner's
