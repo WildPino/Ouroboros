@@ -512,11 +512,31 @@ administrator account approved the prompt.
 - The `bin` folder is added to the machine `PATH`, so `ouroboros` works in a
   new terminal.
 - Running a newer `Ouroboros.exe` updates the installed files and keeps the
-  configuration and the repository. An older one refuses.
+  configuration and the repository. An older one refuses. The installed
+  version is the `DisplayVersion` of the registry entry; a development build,
+  whose version is not a release tag, can replace any version and be
+  replaced by any.
+- Setup sets `restic_path` only in a configuration that has none and that it
+  may rewrite (§12.5). In a file edited by hand it changes nothing, and its
+  final message names the line to add.
+- An existing scheduled task is pointed at the installed command line by
+  running `bin\ouroboros.exe install --config` with the configuration in
+  `C:\ProgramData\Ouroboros`, which keeps a pause. If the task exists and that
+  configuration does not, setup ends with an error naming the command to run,
+  instead of leaving a task that starts a replaced file.
+- Version 0.1.0, copied by hand to `C:\Program Files\Ouroboros\ouroboros.exe`,
+  is the same file name as `Ouroboros.exe` for Windows: it is replaced like
+  any update, and its task is pointed at `bin\ouroboros.exe` as above.
+  `Ouroboros.exe` ends at once with exit code 2 and no window on arguments it
+  does not know, such as the `run` that such a task may still pass.
+- `Ouroboros.exe install` and `Ouroboros.exe uninstall` work without the
+  window, asking and reporting with native message boxes.
 - Uninstall removes the task, the Event Log source, the files, the shortcut,
-  the `PATH` entry and the registry key. The configuration and the password
+  the `PATH` entry and the registry key. If the task cannot be removed, it
+  stops before touching anything else. The configuration and the password
   are removed only if the user ticks that option; the repository and its
-  backups are never removed by uninstall.
+  backups are never removed by uninstall. `C:\ProgramData\Ouroboros` is kept
+  when the repository is inside it or the configuration cannot be read.
 
 ### 12.5 Editing the configuration
 
@@ -662,7 +682,9 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
      runs); rename `NAME.new` to `NAME`; delete `NAME.old`, or, if it is
      still running, mark it for deletion at the next restart with
      `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)`. Both programs also delete
-     leftover `*.old` files in their folder when they start. An interruption
+     leftover `NAME.old` files in their folder when they start, only when
+     they run from the installed program folder or its `bin` folder, so a
+     user's file of the same name elsewhere is never touched. An interruption
      at any step leaves either the old or the new file under `NAME`.
    - Uninstall removes everything else, then marks the running
      `Ouroboros.exe` and the then empty program folder for deletion at the
