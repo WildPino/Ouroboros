@@ -10,6 +10,7 @@ import (
 	"os/signal"
 
 	"github.com/WildPino/ouroboros/internal/config"
+	"github.com/WildPino/ouroboros/internal/setup"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -43,6 +44,11 @@ func (e *codedError) Error() string {
 func (e *codedError) Unwrap() error { return e.err }
 
 func main() {
+	// An update leaves the replaced ouroboros.exe as ouroboros.exe.old when
+	// it was running (DESIGN.md §12.8, question 4).
+	if exe, err := os.Executable(); err == nil {
+		setup.CleanOld(exe)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
