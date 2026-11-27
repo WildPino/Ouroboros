@@ -715,7 +715,7 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    | `config.saveSettings` | advanced settings | saved, or field errors | in process |
    | `jobs.removed` | none | tags not in the configuration, snapshot count | `snapshots --json` |
    | `jobs.deletePreview` | removed job name | snapshots to go, space back | `forget-job NAME --dry-run --json` |
-   | `jobs.delete` | removed job name, typed confirmation | done; events `delete` | `forget-job NAME --json` |
+   | `jobs.delete` | removed job name, typed confirmation | done; events `delete` | `forget-job NAME --confirm NAME --json` |
    | `snapshots.list` | job name | id, time, size, pinned | `snapshots --job NAME --json` |
    | `snapshots.ls` | snapshot id, folder | entries: name, type, size, time | `ls ID PATH --json` |
    | `restore.run` | snapshot id, paths, target, `overOriginal` | files restored; events `restore` | `restore ... --json` |
