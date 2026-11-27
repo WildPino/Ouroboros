@@ -31,6 +31,8 @@ dependency: the interface uses WebView2, part of Windows 10 and 11.
 
 ```
 cmd/ouroboros/            CLI entry point (subcommands)
+cmd/ouroboros-app/        Ouroboros.exe entry point: window, setup, uninstaller
+internal/payload/         files embedded in Ouroboros.exe, with their checksums
 internal/config/          TOML parsing, defaults, validation, size/duration types
 internal/backend/         Backend interface + shared types
 internal/backend/restic/  restic implementation (process runner, JSON parsing)
@@ -488,9 +490,18 @@ administrator account approved the prompt.
 
 ### 12.4 Installation
 
-- Files: `C:\Program Files\Ouroboros\` holds `Ouroboros.exe`,
-  `ouroboros.exe`, `restic.exe` and the licenses. The folder keeps the
-  inherited Program Files permissions, writable only by administrators.
+- Files: `C:\Program Files\Ouroboros\` keeps the inherited Program Files
+  permissions, writable only by administrators. Windows file names ignore
+  case, so `Ouroboros.exe` and `ouroboros.exe` cannot share a folder:
+
+  ```
+  C:\Program Files\Ouroboros\
+    Ouroboros.exe        window, setup, uninstaller
+    LICENSE
+    bin\ouroboros.exe    command line, on the machine PATH
+    restic\restic.exe    not on PATH, so it never hides another restic
+    restic\LICENSE
+  ```
 - Configuration, password, state and logs: `C:\ProgramData\Ouroboros\`, as
   today, with the folder restricted to SYSTEM and Administrators (§6).
 - The configuration sets `restic_path` to the installed `restic.exe`, so the
@@ -498,8 +509,8 @@ administrator account approved the prompt.
 - Start menu shortcut to `Ouroboros.exe`, and an entry in "Installed apps"
   (registry `Uninstall` key) whose uninstall command is
   `Ouroboros.exe uninstall`.
-- The installation folder is added to the machine `PATH`, so `ouroboros` works
-  in a new terminal.
+- The `bin` folder is added to the machine `PATH`, so `ouroboros` works in a
+  new terminal.
 - Running a newer `Ouroboros.exe` updates the installed files and keeps the
   configuration and the repository. An older one refuses.
 - Uninstall removes the task, the Event Log source, the files, the shortcut,
@@ -626,6 +637,17 @@ Pausing automatic backups disables the scheduled task; resuming enables it.
    - `ouroboros.exe` and `restic.exe` are stored gzip-compressed (standard
      library) inside `Ouroboros.exe` and extracted only by install and
      update, each checked against its SHA-256 after extraction.
+   - `build.ps1` stages the files to embed, with a manifest of their install
+     paths, versions, sizes and SHA-256, in `internal/payload/files` (build
+     output, not committed) and builds `Ouroboros.exe` with the `payload`
+     build tag; without the tag, as in `go test`, nothing is embedded. The
+     development build stages the command line and the license only; the
+     release build adds restic, pinned in `third_party/restic/restic.json`
+     (version, URL and SHA-256 of the official zip, whose `SHA256SUMS` is
+     signed by the restic release key) next to its `LICENSE`.
+   - `Ouroboros.exe --embedded-versions`, a hidden argument, checks every
+     embedded file against the manifest and prints its version, size and
+     SHA-256; the release workflow runs it on the built file.
    - Expected download: about 20 MB (restic 40 MB compresses to 14 MB; the
      command line and the window add about 6 MB).
 4. Update and uninstall. Settled. Windows refuses to delete or overwrite a
