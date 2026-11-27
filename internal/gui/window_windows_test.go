@@ -70,7 +70,7 @@ func TestWindowHardening(t *testing.T) {
 			}
 			return AppInfo{Version: "test"}, nil
 		},
-		Ready: func(close func()) { closeCh <- close },
+		Ready: func(close func(), _ bool) { closeCh <- close },
 	}
 
 	errCh := make(chan error, 1)
@@ -178,7 +178,12 @@ func TestWindowPage(t *testing.T) {
 				defer mu.Unlock()
 				refused = append(refused, what+" "+uri)
 			},
-			Ready: func(close func()) { closeCh <- close },
+			Ready: func(close func(), shown bool) {
+				if !shown {
+					t.Error("the browser is not visible or does not fill the window")
+				}
+				closeCh <- close
+			},
 		})
 	}()
 	var closeWindow func()

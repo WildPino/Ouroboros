@@ -45,8 +45,9 @@ type Options struct {
 	// popup, download or permission the window refused.
 	Refused func(what, uri string)
 	// Ready, if set, is called on the window's thread once the page is
-	// loaded, with a function that closes the window.
-	Ready func(close func())
+	// loaded, with a function that closes the window and whether the browser
+	// is visible and fills the window.
+	Ready func(close func(), shown bool)
 }
 
 // Run opens the window and returns when it is closed. If another window of
@@ -148,7 +149,7 @@ func Run(opts Options) error {
 	if opts.Ready != nil {
 		var once sync.Once
 		c.NavigationCompletedCallback = func(*edge.ICoreWebView2, *edge.ICoreWebView2NavigationCompletedEventArgs) {
-			once.Do(func() { opts.Ready(w.Destroy) })
+			once.Do(func() { opts.Ready(w.Destroy, c.Shown()) })
 		}
 	}
 

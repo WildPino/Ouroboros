@@ -20,6 +20,9 @@ var (
 	getDpiForSystem = windows.NewLazySystemDLL("user32.dll").NewProc("GetDpiForSystem")
 )
 
+// sizeMinimized is SIZE_MINIMIZED, the wParam of WM_SIZE.
+const sizeMinimized = 1
+
 func getWindowContext(wnd uintptr) interface{} {
 	windowContextSync.RLock()
 	defer windowContextSync.RUnlock()
@@ -101,6 +104,13 @@ func wndproc(hwnd, msg, wp, lp uintptr) uintptr {
 			r, _, _ := w32.User32DefWindowProcW.Call(hwnd, msg, wp, lp)
 			return r
 		case w32.WMSize:
+			// A minimized browser stops rendering; it must be made visible
+			// again on restore.
+			if wp == sizeMinimized {
+				_ = w.browser.Hide()
+				break
+			}
+			_ = w.browser.Show()
 			w.browser.Resize()
 		case w32.WMActivate:
 			if wp == w32.WAInactive {
@@ -228,8 +238,10 @@ func (w *webview) create(opts WindowOptions) error {
 		_, _, _ = w32.User32DestroyWindow.Call(w.hwnd)
 		return err
 	}
-	w.browser.Resize()
 	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
+	// The browser was created in a hidden window, so it starts hidden too.
+	_ = w.browser.Show()
+	w.browser.Resize()
 	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
 	_, _, _ = w32.User32SetFocus.Call(w.hwnd)
 	return nil

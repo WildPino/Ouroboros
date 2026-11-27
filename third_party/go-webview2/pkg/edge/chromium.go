@@ -176,6 +176,32 @@ func (e *Chromium) Hide() error {
 	return e.controller.PutIsVisible(false)
 }
 
+// Shown reports whether the browser is visible and covers the whole client
+// area of its window. It must be called on the window's thread.
+func (e *Chromium) Shown() bool {
+	if e.controller == nil {
+		return false
+	}
+	var visible int32
+	hr, _, _ := e.controller.vtbl.GetIsVisible.Call(
+		uintptr(unsafe.Pointer(e.controller)),
+		uintptr(unsafe.Pointer(&visible)),
+	)
+	if int32(hr) < 0 || visible == 0 {
+		return false
+	}
+	var bounds, client w32.Rect
+	hr, _, _ = e.controller.vtbl.GetBounds.Call(
+		uintptr(unsafe.Pointer(e.controller)),
+		uintptr(unsafe.Pointer(&bounds)),
+	)
+	if int32(hr) < 0 {
+		return false
+	}
+	r, _, _ := w32.User32GetClientRect.Call(e.hwnd, uintptr(unsafe.Pointer(&client)))
+	return r != 0 && client.Right > 0 && client.Bottom > 0 && bounds == client
+}
+
 // QueryInterface, AddRef and Release are not used for the handlers, which
 // answer QueryInterface themselves (queryHandler); the handlers live as
 // long as the Chromium.
